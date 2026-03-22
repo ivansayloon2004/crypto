@@ -36,6 +36,7 @@ const marketIntervalSelect = document.getElementById("marketIntervalSelect");
 const loadChartButton = document.getElementById("loadChartButton");
 const useMexcSymbolsButton = document.getElementById("useMexcSymbolsButton");
 const toggleLiveChartButton = document.getElementById("toggleLiveChartButton");
+const marketSymbolChips = document.getElementById("marketSymbolChips");
 const marketChartStatus = document.getElementById("marketChartStatus");
 const marketChartTitle = document.getElementById("marketChartTitle");
 const marketChartPrice = document.getElementById("marketChartPrice");
@@ -74,6 +75,7 @@ let marketChartTimer = null;
 let marketChartLiveEnabled = true;
 let marketChartRefreshMs = 5000;
 let marketChartRequestId = 0;
+const DEFAULT_MARKET_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "BNBUSDT"];
 
 bootstrap();
 
@@ -171,6 +173,7 @@ mexcForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const config = readMexcForm();
   persistMexcConfig(config);
+  renderMarketSymbolChips();
   syncStatus.textContent = config.apiKey ? (config.rememberKeys ? "MEXC keys remembered on this device." : "MEXC keys saved for this browser session only.") : "Saved with empty keys. Add keys before syncing.";
 });
 
@@ -209,6 +212,7 @@ function initializeDashboard() {
   renderCalendar();
   renderSelectedDate();
   hydrateDayNoteForm();
+  renderMarketSymbolChips();
   updateLiveChartUi();
   loadMarketChart();
 }
@@ -790,7 +794,46 @@ function useMexcSymbolsForChart() {
   }
 
   marketSymbolInput.value = symbols[0].toUpperCase();
+  renderMarketSymbolChips();
   loadMarketChart();
+}
+
+function renderMarketSymbolChips() {
+  if (!marketSymbolChips || !marketSymbolInput) {
+    return;
+  }
+
+  const savedSymbols = String(mexcForm?.elements?.symbols?.value || "")
+    .split(",")
+    .map((value) => value.trim().toUpperCase())
+    .filter(Boolean);
+  const activeSymbol = String(marketSymbolInput.value || "").trim().toUpperCase() || "BTCUSDT";
+  const symbols = [...new Set([activeSymbol, ...savedSymbols, ...DEFAULT_MARKET_SYMBOLS])].slice(0, 12);
+
+  marketSymbolChips.innerHTML = symbols
+    .map((symbol) => `
+      <button
+        type="button"
+        class="symbol-chip-button ${symbol === activeSymbol ? "is-active" : ""}"
+        data-symbol="${escapeHtml(symbol)}"
+      >
+        ${escapeHtml(symbol)}
+      </button>
+    `)
+    .join("");
+
+  marketSymbolChips.querySelectorAll(".symbol-chip-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const symbol = String(button.dataset.symbol || "").trim().toUpperCase();
+      if (!symbol) {
+        return;
+      }
+
+      marketSymbolInput.value = symbol;
+      renderMarketSymbolChips();
+      loadMarketChart();
+    });
+  });
 }
 
 function clearMarketChart() {
@@ -912,6 +955,8 @@ function updateLiveChartUi() {
     marketChartLiveBadge.textContent = marketChartLiveEnabled ? "Live" : "Paused";
     marketChartLiveBadge.classList.toggle("is-off", !marketChartLiveEnabled);
   }
+
+  renderMarketSymbolChips();
 }
 
 function syncMarketChartTimer() {

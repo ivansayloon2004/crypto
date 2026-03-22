@@ -189,6 +189,15 @@ h1 {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.quick-symbols-head {
+  margin: 18px 0 10px;
+}
+
+.quick-symbols-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
 .chart-board-head {
   display: flex;
   justify-content: space-between;
@@ -211,6 +220,33 @@ h1 {
 .pill-live.is-off {
   color: var(--muted);
   background: rgba(255, 255, 255, 0.06);
+}
+
+.symbol-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.symbol-chip-button {
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
+}
+
+.symbol-chip-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(125, 196, 255, 0.42);
+}
+
+.symbol-chip-button.is-active {
+  color: #0a111f;
+  background: linear-gradient(135deg, var(--gold), #ffd899);
+  border-color: transparent;
 }
 
 .market-chart-canvas {
