@@ -53,7 +53,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && requestUrl.pathname === "/api/mexc/markets") {
-    return withAuthenticatedUser(req, res, () => handleMexcMarkets(res));
+    return withAuthenticatedUser(req, res, () => handleMexcMarkets(res, requestUrl));
   }
 
   if (req.method === "POST" && requestUrl.pathname === "/api/ai/chart-analysis") {
@@ -212,20 +212,80 @@ async function handleMexcKlines(requestUrl, res) {
   const symbol = String(requestUrl.searchParams.get("symbol") || "BTCUSDT").trim().toUpperCase();
   const interval = String(requestUrl.searchParams.get("interval") || "4h").trim();
   const limit = Math.min(200, Math.max(20, Number(requestUrl.searchParams.get("limit") || 80)));
+  const marketType = String(requestUrl.searchParams.get("type") || "spot").trim().toLowerCase();
 
   try {
+    if (marketType === "futures") {
+      const futuresSymbol = normalizeFuturesSymbol(symbol);
+      const futuresInterval = mapFuturesInterval(interval);
+      const payload = await publicGet({
+        endpoint: `/api/v1/contract/kline/${encodeURIComponent(futuresSymbol)}?interval=${encodeURIComponent(futuresInterval)}`,
+        apiBase: "https://contract.mexc.com",
+      });
+      return sendJson(res, 200, {
+        symbol: futuresSymbol,
+        interval,
+        marketType,
+        klines: mapFuturesKlines(payload?.data).slice(-limit),
+      });
+    }
+
     const payload = await publicGet({
       endpoint: `/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`,
       apiBase: "https://api.mexc.com",
     });
-    return sendJson(res, 200, { symbol, interval, klines: payload });
+    return sendJson(res, 200, { symbol, interval, marketType, klines: payload });
   } catch (error) {
     return sendJson(res, 500, { error: error.message });
   }
 }
 
-async function handleMexcMarkets(res) {
+async function handleMexcMarkets(res, requestUrl) {
+  const marketType = String(requestUrl?.searchParams?.get("type") || "spot").trim().toLowerCase();
   try {
+    if (marketType === "futures") {
+      const [detailsPayload, tickersPayload] = await Promise.all([
+        publicGet({
+          endpoint: "/api/v1/contract/detail",
+          apiBase: "https://contract.mexc.com",
+        }),
+        publicGet({
+          endpoint: "/api/v1/contract/ticker",
+          apiBase: "https://contract.mexc.com",
+        }),
+      ]);
+
+      const detailMap = new Map(
+        (Array.isArray(detailsPayload?.data) ? detailsPayload.data : [])
+          .filter((entry) => entry?.apiAllowed !== false)
+          .map((entry) => [String(entry.symbol || "").toUpperCase(), entry])
+      );
+
+      const markets = (Array.isArray(tickersPayload?.data) ? tickersPayload.data : [])
+        .map((entry) => {
+          const symbol = String(entry.symbol || "").toUpperCase();
+          const details = detailMap.get(symbol);
+          if (!details) {
+            return null;
+          }
+
+          return {
+            symbol,
+            marketType,
+            baseAsset: String(details.baseCoin || ""),
+            quoteAsset: String(details.quoteCoin || ""),
+            lastPrice: Number(entry.lastPrice || 0),
+            priceChangePercent: Number(entry.riseFallRate || 0) * 100,
+            volume: Number(entry.volume24 || 0),
+            quoteVolume: Number(entry.amount24 || 0),
+          };
+        })
+        .filter(Boolean)
+        .sort((left, right) => Number(right.quoteVolume || 0) - Number(left.quoteVolume || 0));
+
+      return sendJson(res, 200, { marketType, markets });
+    }
+
     const [exchangeInfo, tickers] = await Promise.all([
       publicGet({
         endpoint: "/api/v3/exchangeInfo",
@@ -253,6 +313,7 @@ async function handleMexcMarkets(res) {
 
         return {
           symbol,
+          marketType,
           baseAsset: String(details.baseAsset || ""),
           quoteAsset: String(details.quoteAsset || ""),
           lastPrice: Number(entry.lastPrice || 0),
@@ -262,16 +323,53 @@ async function handleMexcMarkets(res) {
         };
       })
       .filter(Boolean)
-      .sort((left, right) => {
-        const leftVolume = Number(left.quoteVolume || 0);
-        const rightVolume = Number(right.quoteVolume || 0);
-        return rightVolume - leftVolume;
-      });
+      .sort((left, right) => Number(right.quoteVolume || 0) - Number(left.quoteVolume || 0));
 
-    return sendJson(res, 200, { markets });
+    return sendJson(res, 200, { marketType, markets });
   } catch (error) {
     return sendJson(res, 500, { error: error.message });
   }
+}
+
+function normalizeFuturesSymbol(symbol) {
+  const raw = String(symbol || "").trim().toUpperCase();
+  if (raw.includes("_")) {
+    return raw;
+  }
+  if (raw.endsWith("USDT")) {
+    return `${raw.slice(0, -4)}_USDT`;
+  }
+  if (raw.endsWith("USD")) {
+    return `${raw.slice(0, -3)}_USD`;
+  }
+  return raw;
+}
+
+function mapFuturesInterval(interval) {
+  const map = {
+    "1m": "Min1",
+    "5m": "Min5",
+    "15m": "Min15",
+    "30m": "Min30",
+    "60m": "Min60",
+    "4h": "Hour4",
+    "1d": "Day1",
+    "1W": "Week1",
+  };
+
+  return map[String(interval || "").trim()] || "Hour4";
+}
+
+function mapFuturesKlines(data) {
+  const source = data && Array.isArray(data.time) ? data.time : [];
+  return source.map((time, index) => ([
+    Number(time || 0) * 1000,
+    Number(data.open?.[index] || 0),
+    Number(data.high?.[index] || 0),
+    Number(data.low?.[index] || 0),
+    Number(data.close?.[index] || 0),
+    Number(data.vol?.[index] || 0),
+  ]));
 }
 
 function handleSession(req, res) {

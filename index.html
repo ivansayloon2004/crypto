@@ -101,6 +101,14 @@
               <p class="section-label">MEXC Charts</p>
               <h2>Live Market Chart</h2>
             </div>
+            <div class="market-tabs">
+              <button id="marketTabFavorites" class="button button-ghost" type="button">Favorites</button>
+              <button id="marketTabSpot" class="button button-primary" type="button">Spot</button>
+              <button id="marketTabFutures" class="button button-ghost" type="button">Futures</button>
+              <button id="marketTabGainers" class="button button-ghost" type="button">Gainers</button>
+              <button id="marketTabLosers" class="button button-ghost" type="button">Losers</button>
+              <button id="marketTabVolume" class="button button-ghost" type="button">Volume</button>
+            </div>
           </div>
           <div class="split-fields">
             <label>
@@ -142,6 +150,10 @@
                 Search Pair
                 <input id="marketSearchInput" type="text" placeholder="Search BTC, ETH, SOL..." />
               </label>
+              <div class="stack-row market-inline-actions">
+                <button id="favoriteCurrentSymbolButton" class="button button-ghost" type="button">Star Current</button>
+                <button id="addAlertButton" class="button button-ghost" type="button">Add Alert</button>
+              </div>
               <div class="market-list-head">
                 <span>Trading Pair</span>
                 <span>Last Price</span>
@@ -153,14 +165,107 @@
             </div>
             <div class="chart-board">
               <div class="chart-board-head">
-                <span id="marketChartTitle">BTCUSDT 4h</span>
+                <div>
+                  <span id="marketChartTitle">BTCUSDT 4h</span>
+                  <p id="marketChartMeta" class="muted chart-meta-copy">Spot market with live MEXC feed.</p>
+                </div>
                 <div class="chart-board-meta">
+                  <label class="inline-check">
+                    <input id="indicatorVolume" type="checkbox" checked />
+                    <span>Volume</span>
+                  </label>
+                  <label class="inline-check">
+                    <input id="indicatorEma20" type="checkbox" checked />
+                    <span>EMA 20</span>
+                  </label>
+                  <label class="inline-check">
+                    <input id="indicatorEma50" type="checkbox" checked />
+                    <span>EMA 50</span>
+                  </label>
                   <span id="marketChartLiveBadge" class="pill pill-live">Live</span>
                   <span id="marketChartPrice" class="pill">Last: --</span>
                 </div>
               </div>
               <canvas id="marketChartCanvas" class="market-chart-canvas" width="980" height="360"></canvas>
+              <div id="chartHoverInfo" class="muted chart-hover-info">Hover the chart to inspect candle values.</div>
             </div>
+          </div>
+          <div class="market-workspace-grid">
+            <section class="card nested-card">
+              <div class="section-head">
+                <div>
+                  <p class="section-label">Multi Chart</p>
+                  <h3>Favorite Snapshots</h3>
+                </div>
+              </div>
+              <div id="miniChartsGrid" class="mini-charts-grid"></div>
+            </section>
+            <section class="card nested-card">
+              <div class="section-head">
+                <div>
+                  <p class="section-label">Symbol Analytics</p>
+                  <h3>Current Pair Breakdown</h3>
+                </div>
+              </div>
+              <div id="symbolAnalytics" class="analytics-grid"></div>
+            </section>
+            <section class="card nested-card">
+              <div class="section-head">
+                <div>
+                  <p class="section-label">Alerts</p>
+                  <h3>Price Watch</h3>
+                </div>
+              </div>
+              <form id="alertForm" class="activity-form compact-form">
+                <div class="split-fields">
+                  <label>
+                    Symbol
+                    <input id="alertSymbolInput" type="text" placeholder="BTCUSDT" />
+                  </label>
+                  <label>
+                    Target Price
+                    <input id="alertPriceInput" type="number" step="0.000001" placeholder="70000" />
+                  </label>
+                </div>
+                <div class="split-fields">
+                  <label>
+                    Direction
+                    <select id="alertDirectionSelect">
+                      <option value="above">Crosses Above</option>
+                      <option value="below">Crosses Below</option>
+                    </select>
+                  </label>
+                  <label>
+                    Notes
+                    <input id="alertNoteInput" type="text" placeholder="Breakout level" />
+                  </label>
+                </div>
+                <button type="submit" class="button button-secondary">Save Alert</button>
+              </form>
+              <div id="alertsList" class="event-list empty-state">No active alerts yet.</div>
+            </section>
+            <section class="card nested-card">
+              <div class="section-head">
+                <div>
+                  <p class="section-label">Symbol Journal</p>
+                  <h3>Trading Notes By Pair</h3>
+                </div>
+              </div>
+              <form id="symbolJournalForm" class="activity-form compact-form">
+                <label>
+                  Selected Symbol
+                  <input id="symbolJournalSymbol" type="text" readonly />
+                </label>
+                <label>
+                  Notes
+                  <textarea id="symbolJournalNotes" rows="4" placeholder="Setup quality, lesson, and execution notes for this pair."></textarea>
+                </label>
+                <div class="stack-row">
+                  <button type="submit" class="button button-primary">Save Journal</button>
+                  <button id="clearSymbolJournalButton" type="button" class="button button-ghost">Clear</button>
+                </div>
+              </form>
+            </section>
           </div>
         </section>
       </section>
@@ -295,7 +400,10 @@
               Context
               <textarea id="chartContextInput" rows="3" placeholder="BTCUSDT 4H, looking at breakout retest after CPI move"></textarea>
             </label>
-            <button type="submit" class="button button-secondary">Analyze Chart</button>
+            <div class="stack-row">
+              <button type="submit" class="button button-secondary">Analyze Chart</button>
+              <button id="analyzeLiveChartButton" type="button" class="button button-ghost">Analyze Current Chart</button>
+            </div>
           </form>
           <div id="chartPreviewWrap" class="chart-preview-wrap is-hidden">
             <img id="chartPreviewImage" class="chart-preview-image" alt="Chart preview" />

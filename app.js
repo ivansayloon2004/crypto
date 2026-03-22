@@ -2,6 +2,9 @@ const STORAGE_KEY = "crypto-calendar-events-v1";
 const NOTES_STORAGE_KEY = "crypto-calendar-notes-v1";
 const MEXC_STORAGE_KEY = "crypto-calendar-mexc-config-v2";
 const MEXC_SESSION_KEY = "crypto-calendar-mexc-session-v2";
+const FAVORITES_STORAGE_KEY = "crypto-calendar-favorites-v1";
+const ALERTS_STORAGE_KEY = "crypto-calendar-alerts-v1";
+const SYMBOL_JOURNAL_STORAGE_KEY = "crypto-calendar-symbol-journal-v1";
 const API_BASE_URL = window.location.origin;
 const MEXC_MARKET_WS_URL = "wss://wbs-api.mexc.com/ws";
 const LEGACY_DEMO_NOTES = new Set([
@@ -21,6 +24,11 @@ const state = {
   pricesBySymbol: {},
   openPositions: [],
   markets: [],
+  marketType: "spot",
+  marketView: "spot",
+  favorites: loadFavorites(),
+  alerts: loadAlerts(),
+  symbolJournal: loadSymbolJournal(),
 };
 
 const monthLabel = document.getElementById("monthLabel");
@@ -42,11 +50,33 @@ const marketSymbolChips = document.getElementById("marketSymbolChips");
 const marketSearchInput = document.getElementById("marketSearchInput");
 const marketListStatus = document.getElementById("marketListStatus");
 const marketList = document.getElementById("marketList");
+const marketTabFavorites = document.getElementById("marketTabFavorites");
+const marketTabSpot = document.getElementById("marketTabSpot");
+const marketTabFutures = document.getElementById("marketTabFutures");
+const marketTabGainers = document.getElementById("marketTabGainers");
+const marketTabLosers = document.getElementById("marketTabLosers");
+const marketTabVolume = document.getElementById("marketTabVolume");
+const favoriteCurrentSymbolButton = document.getElementById("favoriteCurrentSymbolButton");
+const addAlertButton = document.getElementById("addAlertButton");
 const marketChartStatus = document.getElementById("marketChartStatus");
 const marketChartTitle = document.getElementById("marketChartTitle");
+const marketChartMeta = document.getElementById("marketChartMeta");
 const marketChartPrice = document.getElementById("marketChartPrice");
 const marketChartLiveBadge = document.getElementById("marketChartLiveBadge");
 const marketChartCanvas = document.getElementById("marketChartCanvas");
+const chartHoverInfo = document.getElementById("chartHoverInfo");
+const indicatorVolume = document.getElementById("indicatorVolume");
+const indicatorEma20 = document.getElementById("indicatorEma20");
+const indicatorEma50 = document.getElementById("indicatorEma50");
+const miniChartsGrid = document.getElementById("miniChartsGrid");
+const symbolAnalytics = document.getElementById("symbolAnalytics");
+const alertForm = document.getElementById("alertForm");
+const alertsList = document.getElementById("alertsList");
+const alertSymbolInput = document.getElementById("alertSymbolInput");
+const symbolJournalForm = document.getElementById("symbolJournalForm");
+const symbolJournalSymbol = document.getElementById("symbolJournalSymbol");
+const symbolJournalNotes = document.getElementById("symbolJournalNotes");
+const analyzeLiveChartButton = document.getElementById("analyzeLiveChartButton");
 const aiChartForm = document.getElementById("aiChartForm");
 const chartImageInput = document.getElementById("chartImageInput");
 const chartContextInput = document.getElementById("chartContextInput");
@@ -84,6 +114,7 @@ let marketChartSocket = null;
 let marketChartPingTimer = null;
 let marketChartReconnectTimer = null;
 let marketChartSeries = [];
+let marketChartHoverBound = false;
 const DEFAULT_MARKET_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "BNBUSDT"];
 
 bootstrap();
@@ -176,6 +207,17 @@ if (toggleLiveChartButton) {
 if (marketSearchInput) {
   marketSearchInput.addEventListener("input", renderMarketList);
 }
+marketTabFavorites?.addEventListener("click", () => switchMarketView("favorites"));
+marketTabSpot?.addEventListener("click", () => switchMarketView("spot"));
+marketTabFutures?.addEventListener("click", () => switchMarketView("futures"));
+marketTabGainers?.addEventListener("click", () => switchMarketView("gainers"));
+marketTabLosers?.addEventListener("click", () => switchMarketView("losers"));
+marketTabVolume?.addEventListener("click", () => switchMarketView("volume"));
+favoriteCurrentSymbolButton?.addEventListener("click", toggleCurrentFavorite);
+addAlertButton?.addEventListener("click", seedAlertFormFromCurrentSymbol);
+indicatorVolume?.addEventListener("change", redrawCurrentChart);
+indicatorEma20?.addEventListener("change", redrawCurrentChart);
+indicatorEma50?.addEventListener("change", redrawCurrentChart);
 chartImageInput.addEventListener("change", handleChartPreview);
 fieldToggles.forEach((button) => {
   button.addEventListener("click", () => toggleSecretField(button));
@@ -191,6 +233,10 @@ mexcForm.addEventListener("submit", (event) => {
 });
 
 aiChartForm.addEventListener("submit", analyzeChartScreenshot);
+alertForm?.addEventListener("submit", saveAlert);
+symbolJournalForm?.addEventListener("submit", saveSymbolJournal);
+document.getElementById("clearSymbolJournalButton")?.addEventListener("click", clearSymbolJournal);
+analyzeLiveChartButton?.addEventListener("click", analyzeCurrentChartCanvas);
 document.addEventListener("visibilitychange", handleChartVisibilityChange);
 
 function renderWeekdays() {
@@ -227,6 +273,10 @@ function initializeDashboard() {
   hydrateDayNoteForm();
   renderMarketSymbolChips();
   updateLiveChartUi();
+  hydrateSymbolJournal();
+  renderAlerts();
+  renderSymbolAnalytics();
+  renderMiniCharts();
   loadMarketCatalog();
   loadMarketChart();
 }
@@ -439,6 +489,7 @@ async function syncMexc() {
     renderStats();
     renderCalendar();
     renderSelectedDate();
+    renderSymbolAnalytics();
     syncStatus.textContent = `Synced ${normalized.length} trades from MEXC.`;
   } catch (error) {
     syncStatus.textContent = `MEXC sync unavailable: ${error.message}`;
@@ -712,33 +763,37 @@ async function analyzeChartScreenshot(event) {
     return;
   }
 
-  aiChartStatus.textContent = "Analyzing chart screenshot...";
-  aiChartResult.textContent = "Working on the chart review...";
-
   try {
     const imageDataUrl = await fileToDataUrl(file);
-    const response = await fetch(`${API_BASE_URL}/api/ai/chart-analysis`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "same-origin",
-      body: JSON.stringify({
-        imageDataUrl,
-        context: chartContextInput.value.trim(),
-      }),
-    });
-    const payload = await response.json();
-    if (!response.ok) {
-      throw new Error(payload.error || "Chart analysis failed");
-    }
-
-    aiChartStatus.textContent = "Chart analysis ready.";
-    aiChartResult.textContent = payload.analysis || "No analysis returned.";
+    await submitChartAnalysis(imageDataUrl, chartContextInput.value.trim());
   } catch (error) {
     aiChartStatus.textContent = `AI chart review unavailable: ${error.message}`;
     aiChartResult.textContent = "No analysis yet.";
   }
+}
+
+async function submitChartAnalysis(imageDataUrl, context) {
+  aiChartStatus.textContent = "Analyzing chart screenshot...";
+  aiChartResult.textContent = "Working on the chart review...";
+
+  const response = await fetch(`${API_BASE_URL}/api/ai/chart-analysis`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "same-origin",
+    body: JSON.stringify({
+      imageDataUrl,
+      context,
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error || "Chart analysis failed");
+  }
+
+  aiChartStatus.textContent = "Chart analysis ready.";
+  aiChartResult.textContent = payload.analysis || "No analysis returned.";
 }
 
 function fileToDataUrl(file) {
@@ -763,7 +818,7 @@ async function loadMarketChart() {
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/mexc/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=80`, {
+    const response = await fetch(`${API_BASE_URL}/api/mexc/klines?type=${encodeURIComponent(state.marketType)}&symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=80`, {
       credentials: "same-origin",
     });
     const payload = await response.json();
@@ -775,15 +830,22 @@ async function loadMarketChart() {
       return;
     }
 
+    const resolvedSymbol = String(payload.symbol || symbol).toUpperCase();
     marketChartSeries = Array.isArray(payload.klines) ? payload.klines.slice(-80) : [];
-    drawMarketChart(marketChartSeries, symbol, interval);
+    drawMarketChart(marketChartSeries, resolvedSymbol, interval);
+    if (marketChartMeta) {
+      marketChartMeta.textContent = `${capitalize(state.marketType)} market with live MEXC feed.`;
+    }
     if (marketChartStatus) {
       marketChartStatus.textContent = marketChartLiveEnabled
-        ? `Live ${symbol} ${interval} chart is streaming from MEXC.`
-        : `Loaded ${symbol} ${interval} chart from MEXC.`;
+        ? `Live ${resolvedSymbol} ${interval} chart is streaming from MEXC.`
+        : `Loaded ${resolvedSymbol} ${interval} chart from MEXC.`;
     }
     syncMarketChartTimer();
-    syncMarketChartStream(symbol, interval);
+    syncMarketChartStream(resolvedSymbol, interval);
+    renderSymbolAnalytics();
+    renderMiniCharts();
+    checkAlertsForSymbol(resolvedSymbol, getLastChartPrice());
   } catch (error) {
     if (requestId !== marketChartRequestId) {
       return;
@@ -810,8 +872,22 @@ function useMexcSymbolsForChart() {
   }
 
   marketSymbolInput.value = symbols[0].toUpperCase();
+  if (symbolJournalSymbol) {
+    symbolJournalSymbol.value = marketSymbolInput.value;
+  }
+  hydrateSymbolJournal();
   renderMarketSymbolChips();
+  renderMarketList();
+  renderSymbolAnalytics();
   loadMarketChart();
+}
+
+function redrawCurrentChart() {
+  if (!marketChartSeries.length || !marketSymbolInput || !marketIntervalSelect) {
+    return;
+  }
+
+  drawMarketChart(marketChartSeries, marketSymbolInput.value, marketIntervalSelect.value);
 }
 
 function renderMarketSymbolChips() {
@@ -858,10 +934,10 @@ async function loadMarketCatalog() {
     return;
   }
 
-  marketListStatus.textContent = "Loading MEXC symbols...";
+  marketListStatus.textContent = `Loading ${state.marketType} symbols...`;
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/mexc/markets`, {
+    const response = await fetch(`${API_BASE_URL}/api/mexc/markets?type=${encodeURIComponent(state.marketType)}`, {
       credentials: "same-origin",
     });
     const payload = await response.json();
@@ -871,7 +947,8 @@ async function loadMarketCatalog() {
 
     state.markets = Array.isArray(payload.markets) ? payload.markets : [];
     renderMarketList();
-    marketListStatus.textContent = `Loaded ${state.markets.length} MEXC symbols.`;
+    renderMiniCharts();
+    marketListStatus.textContent = `Loaded ${state.markets.length} ${state.marketType} symbols.`;
   } catch (error) {
     marketListStatus.textContent = `Market list unavailable: ${error.message}`;
     if (marketList) {
@@ -888,7 +965,7 @@ function renderMarketList() {
   const activeSymbol = String(marketSymbolInput?.value || "").trim().toUpperCase();
   const query = String(marketSearchInput?.value || "").trim().toUpperCase();
   const source = Array.isArray(state.markets) ? state.markets : [];
-  const filtered = source
+  let filtered = source
     .filter((entry) => {
       if (!query) {
         return true;
@@ -899,8 +976,20 @@ function renderMarketList() {
         String(entry.baseAsset || "").includes(query) ||
         String(entry.quoteAsset || "").includes(query)
       );
-    })
-    .slice(0, 120);
+    });
+
+  if (state.marketView === "favorites") {
+    filtered = filtered.filter((entry) => state.favorites.includes(entry.symbol));
+  } else if (state.marketView === "gainers") {
+    filtered = [...filtered].sort((left, right) => Number(right.priceChangePercent || 0) - Number(left.priceChangePercent || 0));
+  } else if (state.marketView === "losers") {
+    filtered = [...filtered].sort((left, right) => Number(left.priceChangePercent || 0) - Number(right.priceChangePercent || 0));
+  } else if (state.marketView === "volume") {
+    filtered = [...filtered].sort((left, right) => Number(right.quoteVolume || 0) - Number(left.quoteVolume || 0));
+  }
+
+  filtered = filtered.slice(0, 120);
+  renderMarketTabs();
 
   if (filtered.length === 0) {
     marketList.innerHTML = `<div class="empty-state">No symbols matched your search.</div>`;
@@ -912,19 +1001,21 @@ function renderMarketList() {
       const change = Number(entry.priceChangePercent || 0);
       const changeClass = change > 0 ? "positive-text" : change < 0 ? "negative-text" : "muted";
       return `
-        <button
-          type="button"
+        <article
           class="market-row ${entry.symbol === activeSymbol ? "is-active" : ""}"
           data-symbol="${escapeHtml(entry.symbol)}"
         >
           <div class="market-symbol">
-            <strong>${escapeHtml(entry.symbol)}</strong>
+            <div class="alert-item-row">
+              <strong>${escapeHtml(entry.symbol)}</strong>
+              <button type="button" class="star-button ${state.favorites.includes(entry.symbol) ? "is-active" : ""}" data-star-symbol="${escapeHtml(entry.symbol)}">&#9733;</button>
+            </div>
             <span>${escapeHtml(entry.baseAsset)}/${escapeHtml(entry.quoteAsset)}</span>
           </div>
           <div class="market-metric">${formatCompactPrice(entry.lastPrice)}</div>
           <div class="market-metric ${changeClass}">${formatPercent(entry.priceChangePercent)}</div>
           <div class="market-metric">${formatCompactVolume(entry.quoteVolume)}</div>
-        </button>
+        </article>
       `;
     })
     .join("");
@@ -937,10 +1028,402 @@ function renderMarketList() {
       }
 
       marketSymbolInput.value = symbol;
+      symbolJournalSymbol.value = symbol;
+      hydrateSymbolJournal();
       renderMarketSymbolChips();
       renderMarketList();
+      renderSymbolAnalytics();
       loadMarketChart();
     });
+  });
+
+  marketList.querySelectorAll(".star-button").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleFavoriteSymbol(String(button.dataset.starSymbol || "").trim().toUpperCase());
+    });
+  });
+}
+
+function switchMarketView(view) {
+  state.marketView = view;
+  state.marketType = view === "futures" ? "futures" : "spot";
+  renderMarketTabs();
+  loadMarketCatalog();
+  if (state.marketType === "futures" && marketSymbolInput) {
+    marketSymbolInput.value = normalizeChartSymbol(marketSymbolInput.value, "futures");
+  }
+  if (state.marketType === "spot" && marketSymbolInput) {
+    marketSymbolInput.value = normalizeChartSymbol(marketSymbolInput.value, "spot");
+  }
+  renderMarketSymbolChips();
+  renderMarketList();
+  loadMarketChart();
+}
+
+function renderMarketTabs() {
+  const tabs = {
+    favorites: marketTabFavorites,
+    spot: marketTabSpot,
+    futures: marketTabFutures,
+    gainers: marketTabGainers,
+    losers: marketTabLosers,
+    volume: marketTabVolume,
+  };
+
+  Object.entries(tabs).forEach(([key, element]) => {
+    if (!element) {
+      return;
+    }
+    element.className = key === state.marketView ? "button button-primary" : "button button-ghost";
+  });
+}
+
+function toggleCurrentFavorite() {
+  toggleFavoriteSymbol(String(marketSymbolInput?.value || "").trim().toUpperCase());
+}
+
+function toggleFavoriteSymbol(symbol) {
+  if (!symbol) {
+    return;
+  }
+
+  state.favorites = state.favorites.includes(symbol)
+    ? state.favorites.filter((entry) => entry !== symbol)
+    : [...state.favorites, symbol];
+  persistFavorites();
+  renderMarketSymbolChips();
+  renderMarketList();
+  renderMiniCharts();
+}
+
+function seedAlertFormFromCurrentSymbol() {
+  if (!alertSymbolInput) {
+    return;
+  }
+
+  alertSymbolInput.value = String(marketSymbolInput?.value || "").trim().toUpperCase();
+  document.getElementById("alertPriceInput").value = String(getLastChartPrice() || "");
+}
+
+function saveAlert(event) {
+  event.preventDefault();
+  const symbol = String(alertSymbolInput?.value || "").trim().toUpperCase();
+  const price = Number(document.getElementById("alertPriceInput")?.value || 0);
+  const direction = String(document.getElementById("alertDirectionSelect")?.value || "above");
+  const note = String(document.getElementById("alertNoteInput")?.value || "").trim();
+  if (!symbol || !price) {
+    return;
+  }
+
+  state.alerts.push({
+    id: crypto.randomUUID(),
+    symbol,
+    price,
+    direction,
+    note,
+    marketType: state.marketType,
+    triggered: false,
+  });
+  persistAlerts();
+  renderAlerts();
+  alertForm.reset();
+}
+
+function renderAlerts() {
+  if (!alertsList) {
+    return;
+  }
+
+  if (state.alerts.length === 0) {
+    alertsList.className = "event-list empty-state";
+    alertsList.textContent = "No active alerts yet.";
+    return;
+  }
+
+  alertsList.className = "event-list";
+  alertsList.innerHTML = state.alerts.map((alert) => `
+    <article class="event-item">
+      <div class="alert-item-row">
+        <div>
+          <div class="event-meta">
+            <span class="event-type">${escapeHtml(alert.direction)}</span>
+            <span>${escapeHtml(alert.symbol)}</span>
+          </div>
+          <div class="event-notes">${formatMoney(alert.price)} ${alert.note ? `- ${escapeHtml(alert.note)}` : ""}</div>
+        </div>
+        <button class="delete-button" type="button" data-alert-id="${escapeHtml(alert.id)}">${alert.triggered ? "Triggered" : "Delete"}</button>
+      </div>
+    </article>
+  `).join("");
+
+  alertsList.querySelectorAll("[data-alert-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.alerts = state.alerts.filter((entry) => entry.id !== button.dataset.alertId);
+      persistAlerts();
+      renderAlerts();
+    });
+  });
+}
+
+function checkAlertsForSymbol(symbol, price) {
+  if (!symbol || !price) {
+    return;
+  }
+
+  let changed = false;
+  state.alerts = state.alerts.map((alert) => {
+    if (alert.triggered || alert.symbol !== symbol) {
+      return alert;
+    }
+
+    const shouldTrigger =
+      (alert.direction === "above" && price >= alert.price) ||
+      (alert.direction === "below" && price <= alert.price);
+    if (!shouldTrigger) {
+      return alert;
+    }
+
+    changed = true;
+    syncStatus.textContent = `Alert hit: ${symbol} crossed ${alert.direction} ${formatMoney(alert.price)}.`;
+    return { ...alert, triggered: true };
+  });
+
+  if (changed) {
+    persistAlerts();
+    renderAlerts();
+  }
+}
+
+function renderSymbolAnalytics() {
+  if (!symbolAnalytics) {
+    return;
+  }
+
+  const symbol = String(marketSymbolInput?.value || "").trim().toUpperCase();
+  const trades = state.events.filter((entry) => String(entry.asset || "").toUpperCase() === normalizeChartSymbol(symbol, "spot"));
+  const realized = trades.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
+  const sells = trades.filter((entry) => entry.side === "sell");
+  const wins = sells.filter((entry) => getRealizedPnl(entry) > 0).length;
+  const position = state.openPositions.find((entry) => entry.symbol === normalizeChartSymbol(symbol, "spot"));
+
+  symbolAnalytics.innerHTML = [
+    ["Trades", String(trades.length)],
+    ["Realized P/L", formatSignedMoney(realized)],
+    ["Win Rate", sells.length > 0 ? `${((wins / sells.length) * 100).toFixed(1)}%` : "0.0%"],
+    ["Open Qty", position ? formatAmount(position.quantity) : "0"],
+    ["Avg Cost", position ? formatMoney(position.averageCost) : "0.00"],
+    ["Unrealized", position ? formatSignedMoney(position.unrealizedPnl) : "0.00"],
+  ].map(([label, value]) => `
+    <article class="analytics-item">
+      <span class="muted">${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </article>
+  `).join("");
+}
+
+function renderMiniCharts() {
+  if (!miniChartsGrid) {
+    return;
+  }
+
+  const symbols = state.favorites.slice(0, 4);
+  if (symbols.length === 0) {
+    miniChartsGrid.innerHTML = `<div class="empty-state">Star a few symbols to build your mini chart board.</div>`;
+    return;
+  }
+
+  miniChartsGrid.innerHTML = symbols.map((symbol, index) => `
+    <article class="mini-chart-card">
+      <div class="mini-chart-head">
+        <strong>${escapeHtml(symbol)}</strong>
+        <button type="button" class="button button-ghost" data-open-mini="${escapeHtml(symbol)}">Open</button>
+      </div>
+      <canvas id="miniChartCanvas${index}" class="mini-chart-canvas" width="320" height="120"></canvas>
+    </article>
+  `).join("");
+
+  symbols.forEach((symbol, index) => {
+    const canvas = document.getElementById(`miniChartCanvas${index}`);
+    const market = state.markets.find((entry) => entry.symbol === symbol);
+    drawMiniSparkline(canvas, market);
+  });
+
+  miniChartsGrid.querySelectorAll("[data-open-mini]").forEach((button) => {
+    button.addEventListener("click", () => {
+      marketSymbolInput.value = String(button.dataset.openMini || "").trim().toUpperCase();
+      renderMarketList();
+      renderMarketSymbolChips();
+      renderSymbolAnalytics();
+      loadMarketChart();
+    });
+  });
+}
+
+function drawMiniSparkline(canvas, market) {
+  if (!canvas) {
+    return;
+  }
+
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  const values = marketChartSeries.length > 0 && String(marketSymbolInput?.value || "").trim().toUpperCase() === market?.symbol
+    ? marketChartSeries.map((entry) => Number(entry[4] || 0))
+    : [Number(market?.lastPrice || 0) * 0.96, Number(market?.lastPrice || 0) * 0.985, Number(market?.lastPrice || 0)];
+  const min = Math.min(...values);
+  const max = Math.max(...values, min + 1);
+  context.strokeStyle = Number(market?.priceChangePercent || 0) >= 0 ? "#44d7b6" : "#ff8a80";
+  context.lineWidth = 2;
+  context.beginPath();
+  values.forEach((value, index) => {
+    const x = (canvas.width / Math.max(values.length - 1, 1)) * index;
+    const y = canvas.height - ((value - min) / (max - min || 1)) * (canvas.height - 16) - 8;
+    if (index === 0) {
+      context.moveTo(x, y);
+    } else {
+      context.lineTo(x, y);
+    }
+  });
+  context.stroke();
+}
+
+function hydrateSymbolJournal() {
+  if (!symbolJournalSymbol || !symbolJournalNotes) {
+    return;
+  }
+
+  const symbol = String(marketSymbolInput?.value || symbolJournalSymbol.value || "").trim().toUpperCase();
+  symbolJournalSymbol.value = symbol;
+  symbolJournalNotes.value = state.symbolJournal[symbol] || "";
+}
+
+function saveSymbolJournal(event) {
+  event.preventDefault();
+  const symbol = String(symbolJournalSymbol?.value || "").trim().toUpperCase();
+  if (!symbol) {
+    return;
+  }
+  const notes = String(symbolJournalNotes?.value || "").trim();
+  if (notes) {
+    state.symbolJournal[symbol] = notes;
+  } else {
+    delete state.symbolJournal[symbol];
+  }
+  persistSymbolJournal();
+  syncStatus.textContent = `Saved journal note for ${symbol}.`;
+}
+
+function clearSymbolJournal() {
+  const symbol = String(symbolJournalSymbol?.value || "").trim().toUpperCase();
+  if (!symbol) {
+    return;
+  }
+  delete state.symbolJournal[symbol];
+  persistSymbolJournal();
+  hydrateSymbolJournal();
+}
+
+async function analyzeCurrentChartCanvas() {
+  if (!marketChartCanvas) {
+    return;
+  }
+
+  const dataUrl = marketChartCanvas.toDataURL("image/png");
+  chartPreviewImage.src = dataUrl;
+  chartPreviewWrap.classList.remove("is-hidden");
+  chartContextInput.value = `${marketSymbolInput.value} ${marketIntervalSelect.value} ${capitalize(state.marketType)} market.`;
+
+  await submitChartAnalysis(dataUrl, chartContextInput.value.trim());
+}
+
+function normalizeChartSymbol(symbol, marketType) {
+  const raw = String(symbol || "").trim().toUpperCase();
+  if (marketType === "futures") {
+    if (raw.includes("_")) {
+      return raw;
+    }
+    if (raw.endsWith("USDT")) {
+      return `${raw.slice(0, -4)}_USDT`;
+    }
+  }
+
+  return raw.replaceAll("_", "");
+}
+
+function getLastChartPrice() {
+  const last = marketChartSeries[marketChartSeries.length - 1];
+  return Number(last?.[4] || 0);
+}
+
+function calculateEmaSeries(candles, period) {
+  const multiplier = 2 / (period + 1);
+  let previous = null;
+  return candles.map((entry) => {
+    const close = Number(entry.close || 0);
+    previous = previous == null ? close : (close - previous) * multiplier + previous;
+    return previous;
+  });
+}
+
+function drawLineSeries(context, values, maxPrice, priceRange, chartHeight, padding, chartWidth, strokeStyle) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return;
+  }
+
+  const step = chartWidth / Math.max(values.length - 1, 1);
+  context.strokeStyle = strokeStyle;
+  context.lineWidth = 1.6;
+  context.beginPath();
+  values.forEach((value, index) => {
+    const x = padding.left + step * index;
+    const y = padding.top + ((maxPrice - value) / priceRange) * chartHeight;
+    if (index === 0) {
+      context.moveTo(x, y);
+    } else {
+      context.lineTo(x, y);
+    }
+  });
+  context.stroke();
+}
+
+function bindChartHover(candles, symbol, interval, maxPrice, priceRange, chartHeight, padding, gap) {
+  if (!marketChartCanvas || marketChartHoverBound) {
+    return;
+  }
+
+  marketChartHoverBound = true;
+  marketChartCanvas.addEventListener("mousemove", (event) => {
+    const activeCandles = Array.isArray(marketChartSeries) && marketChartSeries.length > 0
+      ? marketChartSeries.map((entry) => ({
+          time: Number(entry[0]),
+          open: Number(entry[1]),
+          high: Number(entry[2]),
+          low: Number(entry[3]),
+          close: Number(entry[4]),
+          volume: Number(entry[5] || 0),
+        }))
+      : candles;
+
+    if (!Array.isArray(activeCandles) || activeCandles.length === 0) {
+      return;
+    }
+
+    const rect = marketChartCanvas.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * marketChartCanvas.width;
+    const dynamicGap = (marketChartCanvas.width - padding.left - padding.right) / activeCandles.length;
+    const index = Math.max(0, Math.min(activeCandles.length - 1, Math.round((x - padding.left) / dynamicGap)));
+    const candle = activeCandles[index];
+    if (!candle || !chartHoverInfo) {
+      return;
+    }
+
+    chartHoverInfo.textContent = `${marketSymbolInput.value} ${marketIntervalSelect.value} | ${formatDateTime(candle.time)} | O ${formatCompactPrice(candle.open)} H ${formatCompactPrice(candle.high)} L ${formatCompactPrice(candle.low)} C ${formatCompactPrice(candle.close)} V ${formatCompactVolume(candle.volume)}`;
+  });
+
+  marketChartCanvas.addEventListener("mouseleave", () => {
+    if (chartHoverInfo) {
+      chartHoverInfo.textContent = "Hover the chart to inspect candle values.";
+    }
   });
 }
 
@@ -983,6 +1466,7 @@ function drawMarketChart(klines, symbol, interval) {
     high: Number(entry[2]),
     low: Number(entry[3]),
     close: Number(entry[4]),
+    volume: Number(entry[5] || 0),
   }));
   const lows = normalized.map((entry) => entry.low);
   const highs = normalized.map((entry) => entry.high);
@@ -993,6 +1477,16 @@ function drawMarketChart(klines, symbol, interval) {
   const gap = chartWidth / normalized.length;
 
   context.clearRect(0, 0, width, height);
+
+  if (indicatorVolume?.checked) {
+    const volumeMax = Math.max(...normalized.map((entry) => entry.volume), 1);
+    normalized.forEach((entry, index) => {
+      const x = padding.left + gap * index + gap / 2;
+      const barHeight = (entry.volume / volumeMax) * 56;
+      context.fillStyle = entry.close >= entry.open ? "rgba(68,215,182,0.18)" : "rgba(255,138,128,0.18)";
+      context.fillRect(x - candleWidth / 2, height - padding.bottom - barHeight, candleWidth, barHeight);
+    });
+  }
 
   for (let row = 0; row < 5; row += 1) {
     const y = padding.top + (chartHeight / 4) * row;
@@ -1030,6 +1524,13 @@ function drawMarketChart(klines, symbol, interval) {
     context.fillRect(x - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
   });
 
+  if (indicatorEma20?.checked) {
+    drawLineSeries(context, calculateEmaSeries(normalized, 20), maxPrice, priceRange, chartHeight, padding, chartWidth, "#f7b955");
+  }
+  if (indicatorEma50?.checked) {
+    drawLineSeries(context, calculateEmaSeries(normalized, 50), maxPrice, priceRange, chartHeight, padding, chartWidth, "#7dc4ff");
+  }
+
   const last = normalized[normalized.length - 1];
   if (marketChartTitle) {
     marketChartTitle.textContent = `${symbol} ${interval}`;
@@ -1037,6 +1538,8 @@ function drawMarketChart(klines, symbol, interval) {
   if (marketChartPrice) {
     marketChartPrice.textContent = `Last: ${formatMoney(last.close)}`;
   }
+
+  bindChartHover(normalized, symbol, interval, maxPrice, priceRange, chartHeight, padding, gap);
 }
 
 function toggleLiveChart() {
@@ -1066,6 +1569,7 @@ function updateLiveChartUi() {
     marketChartLiveBadge.classList.toggle("is-off", !marketChartLiveEnabled);
   }
 
+  renderMarketTabs();
   renderMarketSymbolChips();
   renderMarketList();
 }
@@ -1092,9 +1596,17 @@ function syncMarketChartStream(nextSymbol, nextInterval) {
     return;
   }
 
+  if (state.marketType === "futures") {
+    stopMarketChartSocket();
+    if (marketChartStatus) {
+      marketChartStatus.textContent = `Loaded ${normalizeChartSymbol(nextSymbol || marketSymbolInput?.value, "futures")} ${nextInterval || marketIntervalSelect?.value || "4h"} futures chart from MEXC.`;
+    }
+    return;
+  }
+
   const symbol = String(nextSymbol || marketSymbolInput?.value || "").trim().toUpperCase() || "BTCUSDT";
   const interval = String(nextInterval || marketIntervalSelect?.value || "4h").trim();
-  const streamName = buildMarketKlineStream(symbol, interval);
+  const streamName = buildMarketKlineStream(symbol, interval, state.marketType);
   if (!streamName) {
     stopMarketChartSocket();
     return;
@@ -1113,8 +1625,9 @@ function syncMarketChartStream(nextSymbol, nextInterval) {
   stopMarketChartSocket();
 
   const socket = new WebSocket(MEXC_MARKET_WS_URL);
-  socket.datasetSymbol = symbol;
+  socket.datasetSymbol = normalizeChartSymbol(symbol, state.marketType);
   socket.datasetInterval = interval;
+  socket.datasetMarketType = state.marketType;
   marketChartSocket = socket;
 
   socket.addEventListener("open", () => {
@@ -1123,10 +1636,14 @@ function syncMarketChartStream(nextSymbol, nextInterval) {
       return;
     }
 
-    socket.send(JSON.stringify({
-      method: "SUBSCRIPTION",
-      params: [streamName],
-    }));
+    if (state.marketType === "futures") {
+      socket.send(streamName);
+    } else {
+      socket.send(JSON.stringify({
+        method: "SUBSCRIPTION",
+        params: [streamName],
+      }));
+    }
 
     marketChartPingTimer = window.setInterval(() => {
       if (marketChartSocket === socket && socket.readyState === WebSocket.OPEN) {
@@ -1155,11 +1672,19 @@ function syncMarketChartStream(nextSymbol, nextInterval) {
       return;
     }
 
+    if (state.marketType === "futures") {
+      if (payload.channel !== "push.kline" || String(payload.symbol || "").toUpperCase() !== normalizeChartSymbol(symbol, "futures")) {
+        return;
+      }
+      applyLiveKlineUpdate(payload.data, symbol, interval, "futures");
+      return;
+    }
+
     if (!payload.publicspotkline || String(payload.symbol || "").toUpperCase() !== symbol) {
       return;
     }
 
-    applyLiveKlineUpdate(payload.publicspotkline, symbol, interval);
+    applyLiveKlineUpdate(payload.publicspotkline, symbol, interval, "spot");
   });
 
   socket.addEventListener("close", () => {
@@ -1208,7 +1733,7 @@ function clearMarketChartSocketTimers() {
   }
 }
 
-function buildMarketKlineStream(symbol, interval) {
+function buildMarketKlineStream(symbol, interval, marketType) {
   const map = {
     "1m": "Min1",
     "5m": "Min5",
@@ -1225,17 +1750,37 @@ function buildMarketKlineStream(symbol, interval) {
     return "";
   }
 
+  if (marketType === "futures") {
+    return JSON.stringify({
+      method: "sub.kline",
+      param: {
+        symbol: normalizeChartSymbol(symbol, "futures"),
+        interval: streamInterval,
+      },
+    });
+  }
+
   return `spot@public.kline.v3.api.pb@${symbol}@${streamInterval}`;
 }
 
-function applyLiveKlineUpdate(kline, symbol, interval) {
-  const nextCandle = [
-    Number(kline.windowstart || 0) * 1000,
-    Number(kline.openingprice || 0),
-    Number(kline.highestprice || 0),
-    Number(kline.lowestprice || 0),
-    Number(kline.closingprice || 0),
-  ];
+function applyLiveKlineUpdate(kline, symbol, interval, marketType) {
+  const nextCandle = marketType === "futures"
+    ? [
+        Number(kline.t || 0) * 1000,
+        Number(kline.o || 0),
+        Number(kline.h || 0),
+        Number(kline.l || 0),
+        Number(kline.c || 0),
+        Number(kline.q || 0),
+      ]
+    : [
+        Number(kline.windowstart || 0) * 1000,
+        Number(kline.openingprice || 0),
+        Number(kline.highestprice || 0),
+        Number(kline.lowestprice || 0),
+        Number(kline.closingprice || 0),
+        Number(kline.volume || 0),
+      ];
 
   if (!nextCandle[0]) {
     return;
@@ -1255,6 +1800,7 @@ function applyLiveKlineUpdate(kline, symbol, interval) {
   if (marketChartStatus) {
     marketChartStatus.textContent = `Live ${symbol} ${interval} chart is streaming from MEXC.`;
   }
+  checkAlertsForSymbol(symbol, Number(nextCandle[4] || 0));
 }
 
 function handleChartVisibilityChange() {
@@ -1293,6 +1839,45 @@ function loadNotes() {
 
 function persistNotes() {
   localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(state.notesByDate));
+}
+
+function loadFavorites() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(FAVORITES_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.map((entry) => String(entry || "").trim().toUpperCase()).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistFavorites() {
+  localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(state.favorites));
+}
+
+function loadAlerts() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ALERTS_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistAlerts() {
+  localStorage.setItem(ALERTS_STORAGE_KEY, JSON.stringify(state.alerts));
+}
+
+function loadSymbolJournal() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SYMBOL_JOURNAL_STORAGE_KEY) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function persistSymbolJournal() {
+  localStorage.setItem(SYMBOL_JOURNAL_STORAGE_KEY, JSON.stringify(state.symbolJournal));
 }
 
 function getEventsForDate(dateKey) {
@@ -1347,6 +1932,7 @@ function deleteActivity(id) {
   renderCalendar();
   renderSelectedDate();
   hydrateDayNoteForm();
+  renderSymbolAnalytics();
   syncStatus.textContent = "Trade deleted from your calendar.";
 }
 
@@ -1439,6 +2025,24 @@ function formatShortDate(dateKey) {
     month: "short",
     day: "numeric",
   }).format(parsed);
+}
+
+function formatDateTime(value) {
+  const parsed = new Date(Number(value || 0));
+  if (Number.isNaN(parsed.valueOf())) {
+    return "Unknown time";
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
+function capitalize(value) {
+  const text = String(value || "");
+  return text ? `${text.charAt(0).toUpperCase()}${text.slice(1)}` : "";
 }
 
 function renderOpenPositions() {
