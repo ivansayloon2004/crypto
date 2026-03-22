@@ -274,6 +274,13 @@ function mapTradeHistory(payload, symbol) {
     type: "trade",
     asset: symbol,
     amount: Number(entry.qty || 0),
+    executedAt: new Date(entry.time).toISOString(),
+    side: entry.isBuyer ? "buy" : "sell",
+    price: Number(entry.price || 0),
+    quoteAmount: Number(entry.quoteQty || 0),
+    fee: Number(entry.commission || 0),
+    feeAsset: String(entry.commissionAsset || ""),
+    isMaker: Boolean(entry.isMaker),
     notes: `${entry.isBuyer ? "Buy" : "Sell"} at ${entry.price} ${symbol} (${entry.isMaker ? "maker" : "taker"})`,
   }));
 }

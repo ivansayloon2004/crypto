@@ -240,6 +240,32 @@ h1 {
   gap: 8px;
 }
 
+.pnl-chip,
+.muted-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.pnl-chip.positive,
+.positive-text {
+  color: var(--mint);
+}
+
+.pnl-chip.negative,
+.negative-text {
+  color: var(--rose);
+}
+
+.pnl-chip.neutral,
+.muted-chip {
+  color: var(--muted);
+}
+
 .event-chip,
 .event-item,
 .pill {
@@ -416,6 +442,14 @@ textarea {
   margin-top: 10px;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.trade-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.92rem;
 }
 
 code {

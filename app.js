@@ -167,6 +167,7 @@ function renderCalendar() {
 
     const dateKey = formatDateKey(day);
     const dayEvents = getEventsForDate(dateKey);
+    const daySummary = summarizeTrades(dayEvents);
     const isOtherMonth = day.getMonth() !== month;
     const isToday = dateKey === formatDateKey(new Date());
     const isSelected = dateKey === state.selectedDate;
@@ -175,10 +176,13 @@ function renderCalendar() {
       <button class="calendar-day ${isOtherMonth ? "is-other-month" : ""} ${isToday ? "is-today" : ""} ${isSelected ? "is-selected" : ""}" data-date="${dateKey}">
         <div class="day-top">
           <span class="day-number">${day.getDate()}</span>
-          <span class="day-count">${dayEvents.length} evt</span>
+          <span class="day-count">${dayEvents.length} trade${dayEvents.length === 1 ? "" : "s"}</span>
         </div>
         <div class="day-preview">
-          ${dayEvents.slice(0, 3).map((entry) => `<span class="event-chip ${entry.type}">${entry.asset} ${formatAmount(entry.amount)}</span>`).join("")}
+          ${dayEvents.length === 0 ? `<span class="event-chip muted-chip">No trades</span>` : `
+            <span class="pnl-chip ${daySummary.pnlClass}">${daySummary.label}</span>
+            <span class="event-chip ${daySummary.pnlClass}">${daySummary.value}</span>
+          `}
         </div>
       </button>
     `);
@@ -198,6 +202,7 @@ function renderCalendar() {
 
 function renderSelectedDate() {
   const events = getEventsForDate(state.selectedDate);
+  const summary = summarizeTrades(events);
   const parsedDate = new Date(`${state.selectedDate}T00:00:00`);
   const readableDate = new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -207,24 +212,29 @@ function renderSelectedDate() {
   }).format(parsedDate);
 
   selectedDateLabel.textContent = readableDate;
-  selectedDateTotal.textContent = `${events.length} event${events.length === 1 ? "" : "s"}`;
+  selectedDateTotal.textContent = events.length === 0 ? "No trades" : `${summary.label} ${summary.value}`;
 
   if (events.length === 0) {
     selectedDateEvents.className = "event-list empty-state";
-    selectedDateEvents.textContent = "No activity on this day yet.";
+    selectedDateEvents.textContent = "No trades on this day yet.";
     return;
   }
 
   selectedDateEvents.className = "event-list";
   selectedDateEvents.innerHTML = events
-    .sort((left, right) => left.type.localeCompare(right.type))
+    .sort((left, right) => (left.executedAt || "").localeCompare(right.executedAt || ""))
     .map((entry) => `
       <article class="event-item ${entry.type}">
         <div class="event-meta">
-          <span class="event-type">${entry.type}</span>
-          <span>${entry.asset}</span>
+          <span class="event-type">${entry.side ? escapeHtml(entry.side) : "trade"}</span>
+          <span>${escapeHtml(entry.asset)}</span>
         </div>
-        <h3>${formatAmount(entry.amount)} ${entry.asset}</h3>
+        <h3>${formatAmount(entry.amount)} ${escapeHtml(entry.asset)}</h3>
+        <div class="trade-stats">
+          <span>Price: ${formatMoney(entry.price)}</span>
+          <span>Value: ${formatMoney(entry.quoteAmount)}</span>
+          <span class="${getTradeCashFlow(entry) >= 0 ? "positive-text" : "negative-text"}">P/L Est.: ${formatSignedMoney(getTradeCashFlow(entry))}</span>
+        </div>
         <div class="event-notes">${entry.notes ? escapeHtml(entry.notes) : "No notes added."}</div>
       </article>
     `)
@@ -531,6 +541,13 @@ function normalizeEvent(entry) {
     type: String(entry.type || "trade").toLowerCase(),
     asset: String(entry.asset || "UNKNOWN").toUpperCase(),
     amount: Number(entry.amount || 0),
+    side: String(entry.side || "").toLowerCase(),
+    price: Number(entry.price || 0),
+    quoteAmount: Number(entry.quoteAmount || 0),
+    fee: Number(entry.fee || 0),
+    feeAsset: String(entry.feeAsset || "").toUpperCase(),
+    isMaker: Boolean(entry.isMaker),
+    executedAt: String(entry.executedAt || entry.date || ""),
     notes: String(entry.notes || "").trim(),
   };
 }
@@ -558,6 +575,38 @@ function shiftDateKey(date, offsetDays) {
 function formatAmount(amount) {
   const numeric = Number(amount || 0);
   return numeric.toLocaleString("en-US", { maximumFractionDigits: 8 });
+}
+
+function formatMoney(amount) {
+  const numeric = Number(amount || 0);
+  return numeric.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatSignedMoney(amount) {
+  const numeric = Number(amount || 0);
+  const sign = numeric > 0 ? "+" : numeric < 0 ? "-" : "";
+  return `${sign}${formatMoney(Math.abs(numeric))}`;
+}
+
+function getTradeCashFlow(entry) {
+  if (!entry.quoteAmount) {
+    return 0;
+  }
+
+  return entry.side === "sell" ? Number(entry.quoteAmount) : -Number(entry.quoteAmount);
+}
+
+function summarizeTrades(events) {
+  const totalCashFlow = events.reduce((sum, entry) => sum + getTradeCashFlow(entry), 0);
+  const pnlClass = totalCashFlow > 0 ? "positive" : totalCashFlow < 0 ? "negative" : "neutral";
+  return {
+    label: "P/L Est.",
+    value: formatSignedMoney(totalCashFlow),
+    pnlClass,
+  };
 }
 
 function escapeHtml(text) {
