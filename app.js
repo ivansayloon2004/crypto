@@ -1,15 +1,14 @@
 const STORAGE_KEY = "crypto-calendar-events-v1";
 const MEXC_STORAGE_KEY = "crypto-calendar-mexc-config-v1";
 const API_BASE_URL = window.location.origin;
-
-const demoEvents = [
-  { id: crypto.randomUUID(), date: "2026-03-18", type: "deposit", asset: "USDT", amount: 2000, notes: "Funding wallet top-up" },
-  { id: crypto.randomUUID(), date: "2026-03-19", type: "trade", asset: "BTC", amount: 0.04, notes: "Spot buy during retrace" },
-  { id: crypto.randomUUID(), date: "2026-03-19", type: "trade", asset: "SOL", amount: 12, notes: "Momentum scalp" },
-  { id: crypto.randomUUID(), date: "2026-03-20", type: "withdrawal", asset: "ETH", amount: 0.5, notes: "Moved to cold wallet" },
-  { id: crypto.randomUUID(), date: "2026-03-21", type: "transfer", asset: "MX", amount: 145, notes: "Transferred between sub-accounts" },
-  { id: crypto.randomUUID(), date: "2026-03-22", type: "trade", asset: "ETH", amount: 1.2, notes: "Swing entry after breakout" },
-];
+const LEGACY_DEMO_NOTES = new Set([
+  "Funding wallet top-up",
+  "Spot buy during retrace",
+  "Momentum scalp",
+  "Moved to cold wallet",
+  "Transferred between sub-accounts",
+  "Swing entry after breakout",
+]);
 
 const state = {
   currentMonth: new Date(),
@@ -53,11 +52,11 @@ document.getElementById("todayButton").addEventListener("click", () => {
 });
 
 document.getElementById("resetButton").addEventListener("click", () => {
-  state.events = structuredClone(demoEvents);
+  state.events = [];
   persistEvents();
   renderCalendar();
   renderSelectedDate();
-  syncStatus.textContent = "Reset to demo data. Your local calendar is ready again.";
+  syncStatus.textContent = "Local calendar data cleared on this browser.";
 });
 
 document.getElementById("importButton").addEventListener("click", () => {
@@ -204,7 +203,7 @@ function renderSelectedDate() {
 }
 
 async function syncMexc() {
-  syncStatus.textContent = "Trying to connect to the local MEXC sync service...";
+  syncStatus.textContent = "Syncing your MEXC deposits, withdrawals, balances, and recent trades...";
 
   try {
     const config = loadMexcConfig();
@@ -239,15 +238,26 @@ async function syncMexc() {
 function loadEvents() {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(demoEvents));
-    return structuredClone(demoEvents);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+    return [];
   }
 
   try {
     const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed.map(normalizeEvent) : structuredClone(demoEvents);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    const cleaned = parsed
+      .map(normalizeEvent)
+      .filter((entry) => !isLegacyDemoEvent(entry));
+    if (cleaned.length !== parsed.length) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+    }
+
+    return cleaned;
   } catch {
-    return structuredClone(demoEvents);
+    return [];
   }
 }
 
@@ -304,6 +314,10 @@ function normalizeEvent(entry) {
     amount: Number(entry.amount || 0),
     notes: String(entry.notes || "").trim(),
   };
+}
+
+function isLegacyDemoEvent(entry) {
+  return LEGACY_DEMO_NOTES.has(entry.notes);
 }
 
 function mergeEvents(existing, incoming) {

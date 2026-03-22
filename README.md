@@ -78,5 +78,6 @@ git push -u origin main
 ## MEXC notes
 
 - The backend currently pulls deposit history, withdrawal history, and a current balance snapshot.
-- Trade-history endpoints vary by account permissions and product scope. You can extend `server.js` with the exact MEXC endpoint you use once your API access is confirmed.
+- The backend now also makes a best-effort pull of recent spot trade history using MEXC V3 `GET /api/v3/myTrades`.
+- MEXC's trade-history endpoint requires a `symbol` and only returns up to roughly the past 1 month, so this app infers likely symbols from your non-zero balances and supported exchange pairs. That means it may miss older trades or trades in assets you no longer hold.
 - Use read-only API keys whenever possible.

@@ -51,16 +51,25 @@ async function handleMexcActivity(req, res) {
   }
 
   try {
-    const [deposits, withdrawals, account] = await Promise.all([
+    const [deposits, withdrawals, account, exchangeInfo] = await Promise.all([
       signedGet({ endpoint: "/api/v3/capital/deposit/hisrec", params: { limit: "50" }, apiKey, apiSecret, apiBase }),
       signedGet({ endpoint: "/api/v3/capital/withdraw/history", params: { limit: "50" }, apiKey, apiSecret, apiBase }),
       signedGet({ endpoint: "/api/v3/account", params: {}, apiKey, apiSecret, apiBase }),
+      publicGet({ endpoint: "/api/v3/exchangeInfo", apiBase }),
     ]);
+    const tradeActivity = await fetchTradeActivity({
+      apiKey,
+      apiSecret,
+      apiBase,
+      account,
+      exchangeInfo,
+    });
 
     const activities = [
       ...mapDepositHistory(deposits),
       ...mapWithdrawalHistory(withdrawals),
       ...mapBalances(account),
+      ...tradeActivity,
     ];
 
     return sendJson(res, 200, { activities });
@@ -82,6 +91,22 @@ async function signedGet({ endpoint, params, apiKey, apiSecret, apiBase }) {
     method: "GET",
     headers: {
       "X-MEXC-APIKEY": apiKey,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.msg || payload.message || `MEXC request failed with ${response.status}`);
+  }
+
+  return payload;
+}
+
+async function publicGet({ endpoint, apiBase }) {
+  const response = await fetch(`${apiBase}${endpoint}`, {
+    method: "GET",
+    headers: {
       "Content-Type": "application/json",
     },
   });
@@ -140,6 +165,75 @@ function mapBalances(payload) {
       amount: Number(entry.free || 0) + Number(entry.locked || 0),
       notes: "Current balance snapshot from MEXC account",
     }));
+}
+
+async function fetchTradeActivity({ apiKey, apiSecret, apiBase, account, exchangeInfo }) {
+  const candidateSymbols = getCandidateTradeSymbols(account, exchangeInfo).slice(0, 12);
+  const tradeResponses = await Promise.all(
+    candidateSymbols.map((symbol) =>
+      signedGet({
+        endpoint: "/api/v3/myTrades",
+        params: {
+          symbol,
+          limit: "100",
+          startTime: (Date.now() - 30 * 24 * 60 * 60 * 1000).toString(),
+          endTime: Date.now().toString(),
+        },
+        apiKey,
+        apiSecret,
+        apiBase,
+      }).catch(() => [])
+    )
+  );
+
+  return tradeResponses.flatMap((payload, index) => mapTradeHistory(payload, candidateSymbols[index]));
+}
+
+function getCandidateTradeSymbols(account, exchangeInfo) {
+  const balances = Array.isArray(account?.balances) ? account.balances : [];
+  const symbols = Array.isArray(exchangeInfo?.symbols) ? exchangeInfo.symbols : [];
+  const availableSymbols = new Set(symbols.map((entry) => entry.symbol));
+  const assetSet = new Set(
+    balances
+      .filter((entry) => Number(entry.free || 0) > 0 || Number(entry.locked || 0) > 0)
+      .map((entry) => entry.asset)
+  );
+  const commonQuotes = ["USDT", "USDC", "BTC", "ETH", "MX"];
+  const candidates = new Set();
+
+  for (const asset of assetSet) {
+    for (const quote of commonQuotes) {
+      if (asset === quote) {
+        continue;
+      }
+
+      const direct = `${asset}${quote}`;
+      const inverse = `${quote}${asset}`;
+      if (availableSymbols.has(direct)) {
+        candidates.add(direct);
+      }
+      if (availableSymbols.has(inverse)) {
+        candidates.add(inverse);
+      }
+    }
+  }
+
+  return [...candidates];
+}
+
+function mapTradeHistory(payload, symbol) {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return payload.map((entry) => ({
+    id: entry.id || `trade-${symbol}-${entry.orderId}-${entry.time}`,
+    date: toDateKey(entry.time),
+    type: "trade",
+    asset: symbol,
+    amount: Number(entry.qty || 0),
+    notes: `${entry.isBuyer ? "Buy" : "Sell"} at ${entry.price} ${symbol} (${entry.isMaker ? "maker" : "taker"})`,
+  }));
 }
 
 function serveStatic(requestPath, res) {
