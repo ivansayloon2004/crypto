@@ -10,6 +10,7 @@ A deployable public dashboard for tracking crypto activity on a calendar, with u
 - JSON import for bulk activity
 - Local browser storage so entries persist on your machine
 - Public-friendly Node server that serves the site and proxies MEXC requests
+- Google sign-in gate for the site itself
 - Per-user MEXC connection flow using keys entered in the browser
 - API key and API secret fields are masked with show/hide toggles
 - MEXC keys default to session-only storage unless the user explicitly chooses to remember them
@@ -34,9 +35,10 @@ node .\server.js
 ```
 
 3. Open [http://localhost:3000](http://localhost:3000)
-4. Enter your MEXC read-only API key and secret in the app
-5. Optionally enter symbols like `BTCUSDT,ETHUSDT` and a sync date range
-6. Press **Sync MEXC**
+4. Sign in with Google
+5. Enter your MEXC read-only API key and secret in the app
+6. Optionally enter symbols like `BTCUSDT,ETHUSDT` and a sync date range
+7. Press **Sync MEXC**
 
 ## Deploy publicly
 
@@ -57,6 +59,7 @@ node .\server.js
 
 ## How public MEXC sync works
 
+- Users must sign in with Google before the app will sync MEXC
 - Each visitor enters their own MEXC API key and secret
 - The browser sends those credentials to your backend only when syncing
 - The backend uses the keys for that request and does not store them in files or memory after the request ends
@@ -66,6 +69,19 @@ node .\server.js
 ## Important safety note
 
 Because this is your server, users are trusting your site during sync. If you want production-grade security for many users, the next upgrade would be encrypted credential handling, accounts, and a database-backed auth flow.
+
+## Google sign-in setup
+
+1. Create a Google Cloud project
+2. Create an OAuth 2.0 Web Client
+3. Add your Render URL as an authorized JavaScript origin
+4. Set `GOOGLE_CLIENT_ID` on your server
+
+Example Render environment variable:
+
+```text
+GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
+```
 
 ## GitHub push commands
 

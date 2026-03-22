@@ -41,6 +41,32 @@ textarea {
   padding: 28px 0 40px;
 }
 
+.app-shell.is-hidden,
+.login-gate.is-hidden {
+  display: none;
+}
+
+.login-gate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.login-card {
+  width: min(560px, 100%);
+  padding: 36px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: linear-gradient(135deg, rgba(16, 35, 59, 0.96), rgba(9, 17, 31, 0.92));
+  box-shadow: var(--shadow);
+}
+
+.google-button-slot {
+  min-height: 42px;
+  margin: 26px 0 14px;
+}
+
 .hero {
   display: flex;
   justify-content: space-between;
@@ -95,6 +121,24 @@ h1 {
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.user-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+#userEmail {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
 }
 
 .dashboard {

@@ -28,13 +28,14 @@ const activityForm = document.getElementById("activityForm");
 const jsonInput = document.getElementById("jsonInput");
 const mexcForm = document.getElementById("mexcForm");
 const fieldToggles = document.querySelectorAll(".field-toggle");
+const loginGate = document.getElementById("loginGate");
+const appShell = document.getElementById("appShell");
+const loginStatus = document.getElementById("loginStatus");
+const googleButton = document.getElementById("googleButton");
+const userEmail = document.getElementById("userEmail");
+let dashboardInitialized = false;
 
-renderWeekdays();
-renderCalendar();
-renderSelectedDate();
-activityForm.elements.date.value = state.selectedDate;
-hydrateMexcForm();
-setDefaultSyncRange();
+bootstrap();
 
 document.getElementById("prevMonthButton").addEventListener("click", () => {
   state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() - 1, 1);
@@ -105,6 +106,7 @@ activityForm.addEventListener("submit", (event) => {
 
 document.getElementById("syncButton").addEventListener("click", syncMexc);
 document.getElementById("clearKeysButton").addEventListener("click", clearMexcKeys);
+document.getElementById("logoutButton").addEventListener("click", logout);
 fieldToggles.forEach((button) => {
   button.addEventListener("click", () => toggleSecretField(button));
 });
@@ -119,6 +121,33 @@ mexcForm.addEventListener("submit", (event) => {
 function renderWeekdays() {
   const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   weekdayRow.innerHTML = weekdays.map((day) => `<div class="weekday-cell">${day}</div>`).join("");
+}
+
+async function bootstrap() {
+  hydrateMexcForm();
+  setDefaultSyncRange();
+  const session = await restoreSession();
+
+  if (session?.authenticated) {
+    showAuthenticatedApp(session.user);
+    initializeDashboard();
+    return;
+  }
+
+  showLoginGate();
+  initializeGoogleLogin();
+}
+
+function initializeDashboard() {
+  if (dashboardInitialized) {
+    return;
+  }
+
+  dashboardInitialized = true;
+  renderWeekdays();
+  renderCalendar();
+  renderSelectedDate();
+  activityForm.elements.date.value = state.selectedDate;
 }
 
 function renderCalendar() {
@@ -241,6 +270,110 @@ async function syncMexc() {
     syncStatus.textContent = `Synced ${normalized.length} trades from MEXC.`;
   } catch (error) {
     syncStatus.textContent = `MEXC sync unavailable: ${error.message}`;
+  }
+}
+
+async function restoreSession() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/auth/session`, {
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      return null;
+    }
+
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function initializeGoogleLogin() {
+  const clientId = document
+    .querySelector('meta[name="google-signin-client_id"]')
+    ?.content?.trim();
+
+  if (!clientId || clientId === "%GOOGLE_CLIENT_ID%") {
+    loginStatus.textContent = "Set GOOGLE_CLIENT_ID on the server before Google sign-in can work.";
+    return;
+  }
+
+  const start = () => {
+    if (!window.google?.accounts?.id) {
+      window.setTimeout(start, 150);
+      return;
+    }
+
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: handleGoogleCredential,
+      auto_select: false,
+      cancel_on_tap_outside: true,
+    });
+
+    googleButton.innerHTML = "";
+    window.google.accounts.id.renderButton(googleButton, {
+      theme: "outline",
+      size: "large",
+      shape: "pill",
+      text: "signin_with",
+      width: 280,
+    });
+    loginStatus.textContent = "Sign in with Google to continue.";
+  };
+
+  start();
+}
+
+async function handleGoogleCredential(response) {
+  loginStatus.textContent = "Verifying Google sign-in...";
+
+  try {
+    const authResponse = await fetch(`${API_BASE_URL}/api/auth/google`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        credential: response.credential,
+      }),
+    });
+    const payload = await authResponse.json();
+
+    if (!authResponse.ok || !payload.authenticated) {
+      throw new Error(payload.error || "Google sign-in failed");
+    }
+
+    showAuthenticatedApp(payload.user);
+    initializeDashboard();
+  } catch (error) {
+    loginStatus.textContent = `Google login failed: ${error.message}`;
+  }
+}
+
+function showAuthenticatedApp(user) {
+  loginGate.classList.add("is-hidden");
+  appShell.classList.remove("is-hidden");
+  userEmail.textContent = user?.email || "Signed in";
+}
+
+function showLoginGate() {
+  appShell.classList.add("is-hidden");
+  loginGate.classList.remove("is-hidden");
+}
+
+async function logout() {
+  try {
+    await fetch(`${API_BASE_URL}/api/auth/logout`, {
+      method: "POST",
+      credentials: "same-origin",
+    });
+  } finally {
+    userEmail.textContent = "Not signed in";
+    showLoginGate();
+    loginStatus.textContent = "Signed out. Sign in with Google to continue.";
+    initializeGoogleLogin();
   }
 }
 

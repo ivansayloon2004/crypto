@@ -5,6 +5,9 @@ const path = require("path");
 const { URL } = require("url");
 
 const PORT = Number(process.env.PORT || 3000);
+const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || "").trim();
+const SESSION_COOKIE = "crypto_calendar_session";
+const sessions = new Map();
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -27,8 +30,20 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { ok: true, date: new Date().toISOString() });
   }
 
+  if (req.method === "GET" && requestUrl.pathname === "/api/auth/session") {
+    return handleSession(req, res);
+  }
+
+  if (req.method === "POST" && requestUrl.pathname === "/api/auth/google") {
+    return handleGoogleAuth(req, res);
+  }
+
+  if (req.method === "POST" && requestUrl.pathname === "/api/auth/logout") {
+    return handleLogout(req, res);
+  }
+
   if (req.method === "POST" && requestUrl.pathname === "/api/mexc/activity") {
-    return handleMexcActivity(req, res);
+    return withAuthenticatedUser(req, res, () => handleMexcActivity(req, res));
   }
 
   return serveStatic(requestUrl.pathname, res);
@@ -71,6 +86,82 @@ async function handleMexcActivity(req, res) {
   } catch (error) {
     return sendJson(res, 500, { error: error.message });
   }
+}
+
+async function handleGoogleAuth(req, res) {
+  if (!GOOGLE_CLIENT_ID) {
+    return sendJson(res, 500, { error: "Missing GOOGLE_CLIENT_ID on server" });
+  }
+
+  const body = await readJsonBody(req);
+  const credential = String(body.credential || "").trim();
+  if (!credential) {
+    return sendJson(res, 400, { error: "Missing Google credential" });
+  }
+
+  try {
+    const tokenInfo = await fetchGoogleTokenInfo(credential);
+    if (!isValidGoogleTokenInfo(tokenInfo)) {
+      return sendJson(res, 401, { error: "Invalid Google token" });
+    }
+
+    if (tokenInfo.aud !== GOOGLE_CLIENT_ID) {
+      return sendJson(res, 401, { error: "Google client ID does not match this site" });
+    }
+
+    const sessionId = crypto.randomBytes(24).toString("hex");
+    const user = {
+      sub: tokenInfo.sub,
+      email: tokenInfo.email,
+      name: tokenInfo.name || tokenInfo.email,
+      picture: tokenInfo.picture || "",
+    };
+
+    sessions.set(sessionId, {
+      user,
+      expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+    });
+
+    setSessionCookie(res, sessionId);
+    return sendJson(res, 200, {
+      authenticated: true,
+      user,
+    });
+  } catch (error) {
+    return sendJson(res, 500, { error: error.message });
+  }
+}
+
+function handleSession(req, res) {
+  const session = getSessionFromRequest(req);
+  if (!session) {
+    return sendJson(res, 200, { authenticated: false });
+  }
+
+  return sendJson(res, 200, {
+    authenticated: true,
+    user: session.user,
+  });
+}
+
+function handleLogout(req, res) {
+  const cookies = parseCookies(req.headers.cookie || "");
+  const sessionId = cookies[SESSION_COOKIE];
+  if (sessionId) {
+    sessions.delete(sessionId);
+  }
+
+  clearSessionCookie(res);
+  return sendJson(res, 200, { ok: true });
+}
+
+function withAuthenticatedUser(req, res, callback) {
+  const session = getSessionFromRequest(req);
+  if (!session) {
+    return sendJson(res, 401, { error: "Sign in with Google first" });
+  }
+
+  return callback(session.user);
 }
 
 async function signedGet({ endpoint, params, apiKey, apiSecret, apiBase }) {
@@ -247,7 +338,7 @@ function serveStatic(requestPath, res) {
 
     const extension = path.extname(filePath).toLowerCase();
     res.writeHead(200, { "Content-Type": mimeTypes[extension] || "text/plain; charset=utf-8" });
-    res.end(content);
+    res.end(injectRuntimeConfig(filePath, content));
   });
 }
 
@@ -287,4 +378,83 @@ function applyCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+async function fetchGoogleTokenInfo(credential) {
+  const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`, {
+    method: "GET",
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error_description || payload.error || "Google token verification failed");
+  }
+
+  return payload;
+}
+
+function isValidGoogleTokenInfo(tokenInfo) {
+  const issuer = tokenInfo.iss;
+  const expiresAt = Number(tokenInfo.exp || 0) * 1000;
+  return (
+    Boolean(tokenInfo.sub) &&
+    Boolean(tokenInfo.email) &&
+    (issuer === "accounts.google.com" || issuer === "https://accounts.google.com") &&
+    expiresAt > Date.now()
+  );
+}
+
+function parseCookies(cookieHeader) {
+  return cookieHeader
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce((all, part) => {
+      const separator = part.indexOf("=");
+      if (separator < 1) {
+        return all;
+      }
+
+      const key = part.slice(0, separator);
+      const value = part.slice(separator + 1);
+      all[key] = decodeURIComponent(value);
+      return all;
+    }, {});
+}
+
+function getSessionFromRequest(req) {
+  const cookies = parseCookies(req.headers.cookie || "");
+  const sessionId = cookies[SESSION_COOKIE];
+  if (!sessionId) {
+    return null;
+  }
+
+  const session = sessions.get(sessionId);
+  if (!session || session.expiresAt <= Date.now()) {
+    sessions.delete(sessionId);
+    return null;
+  }
+
+  return session;
+}
+
+function setSessionCookie(res, sessionId) {
+  res.setHeader("Set-Cookie", `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax${getSecureCookieSuffix()}`);
+}
+
+function clearSessionCookie(res) {
+  res.setHeader("Set-Cookie", `${SESSION_COOKIE}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${getSecureCookieSuffix()}`);
+}
+
+function injectRuntimeConfig(filePath, content) {
+  if (path.basename(filePath) !== "index.html") {
+    return content;
+  }
+
+  return Buffer.from(
+    content.toString("utf8").replaceAll("%GOOGLE_CLIENT_ID%", GOOGLE_CLIENT_ID || "")
+  );
+}
+
+function getSecureCookieSuffix() {
+  return process.env.NODE_ENV === "production" ? "; Secure" : "";
 }

@@ -4,13 +4,28 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Crypto Activity Calendar</title>
+  <meta name="google-signin-client_id" content="%GOOGLE_CLIENT_ID%" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div class="app-shell">
+  <div id="loginGate" class="login-gate">
+    <section class="login-card">
+      <p class="eyebrow">Private Access</p>
+      <h1>Sign in to your crypto calendar</h1>
+      <p class="hero-copy">
+        Use your Google account to unlock your private dashboard. Your MEXC API connection remains separate inside the app.
+      </p>
+      <div id="googleButton" class="google-button-slot"></div>
+      <p id="loginStatus" class="muted">
+        Google sign-in is loading...
+      </p>
+    </section>
+  </div>
+
+  <div id="appShell" class="app-shell is-hidden">
     <header class="hero">
       <div>
         <p class="eyebrow">Crypto Dashboard</p>
@@ -21,6 +36,10 @@
         </p>
       </div>
       <div class="hero-actions">
+        <div class="user-badge">
+          <span id="userEmail">Not signed in</span>
+          <button id="logoutButton" class="button button-ghost">Log Out</button>
+        </div>
         <button id="todayButton" class="button button-primary">Jump to Today</button>
         <button id="syncButton" class="button button-secondary">Sync MEXC</button>
       </div>
@@ -167,6 +186,7 @@
     </main>
   </div>
 
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="./app.js"></script>
 </body>
 </html>
