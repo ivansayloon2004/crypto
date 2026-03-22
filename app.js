@@ -806,9 +806,9 @@ function renderSelectedDate() {
           </div>
           <h3>${formatAmount(entry.amount)} ${escapeHtml(entry.asset)}</h3>
           <div class="trade-stats">
-            <span>Price: ${formatMoney(entry.price)}</span>
-            <span>Value: ${formatMoney(entry.quoteAmount)}</span>
-            <span class="${getRealizedPnl(entry) >= 0 ? "positive-text" : "negative-text"}">Realized P/L: ${formatSignedMoney(getRealizedPnl(entry))}</span>
+            <span>Price (PHP): ${formatMoney(entry.price)}</span>
+            <span>Value (PHP): ${formatMoney(entry.quoteAmount)}</span>
+            <span class="${getRealizedPnl(entry) >= 0 ? "positive-text" : "negative-text"}">Realized P/L (PHP): ${formatSignedMoney(getRealizedPnl(entry))}</span>
           </div>
           <div class="event-notes">${entry.notes ? escapeHtml(entry.notes) : "No exchange note."}</div>
         </article>
@@ -1485,16 +1485,17 @@ function buildMonthlyAiPayload(monthEvents) {
 
 function exportTradesCsv() {
   const rows = [
-    ["date", "executedAt", "symbol", "side", "amount", "price", "quoteAmount", "realizedPnl"],
+    ["date", "executedAt", "symbol", "side", "amount", "pricePhp", "quoteAmountPhp", "realizedPnlPhp", "phpPerUsdt"],
     ...state.events.map((entry) => [
       entry.date,
       entry.executedAt || "",
       entry.asset,
       entry.side,
       entry.amount,
-      entry.price,
-      entry.quoteAmount,
-      getRealizedPnl(entry),
+      convertQuoteToFiat(entry.price),
+      convertQuoteToFiat(entry.quoteAmount),
+      convertQuoteToFiat(getRealizedPnl(entry)),
+      state.usdtToPhpRate,
     ]),
   ];
   downloadFile(`crypto-trades-${formatDateKey(new Date())}.csv`, rows.map((row) => row.map(csvEscape).join(",")).join("\n"), "text/csv;charset=utf-8");
@@ -2075,7 +2076,7 @@ function renderAlerts() {
             <span class="event-type">${escapeHtml(alert.direction)}</span>
             <span>${escapeHtml(alert.symbol)}</span>
           </div>
-          <div class="event-notes">${formatMoney(alert.price)} <span class="muted">(${formatPlainNumber(alert.price, 6)} USDT)</span> ${alert.note ? `- ${escapeHtml(alert.note)}` : ""}</div>
+          <div class="event-notes">${formatMoney(alert.price)} ${alert.note ? `- ${escapeHtml(alert.note)}` : ""}</div>
         </div>
         <button class="delete-button" type="button" data-alert-id="${escapeHtml(alert.id)}">${alert.triggered ? "Triggered" : "Delete"}</button>
       </div>
@@ -3424,8 +3425,8 @@ function renderTradeReplay() {
       <div class="trade-stats">
         <span>Time: ${escapeHtml(formatDateTime(Date.parse(entry.executedAt || `${entry.date}T00:00:00Z`) || 0))}</span>
         <span>Qty: ${formatAmount(entry.amount)}</span>
-        <span>Price: ${formatMoney(entry.price)}</span>
-        <span class="${getRealizedPnl(entry) >= 0 ? "positive-text" : "negative-text"}">Realized: ${formatSignedMoney(getRealizedPnl(entry))}</span>
+        <span>Price (PHP): ${formatMoney(entry.price)}</span>
+        <span class="${getRealizedPnl(entry) >= 0 ? "positive-text" : "negative-text"}">Realized (PHP): ${formatSignedMoney(getRealizedPnl(entry))}</span>
       </div>
       <div class="stack-row">
         <button class="button button-ghost" type="button" data-replay-step="-1">Previous</button>
