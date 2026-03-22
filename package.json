@@ -1,0 +1,13 @@
+{
+  "name": "crypto-activity-calendar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Deployable crypto activity calendar with MEXC sync",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

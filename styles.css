@@ -1,0 +1,379 @@
+:root {
+  --bg: #09111f;
+  --bg-accent: #132238;
+  --panel: rgba(10, 21, 36, 0.88);
+  --panel-strong: #10233b;
+  --line: rgba(165, 193, 224, 0.16);
+  --text: #f4f7fb;
+  --muted: #9eb2ca;
+  --gold: #f7b955;
+  --mint: #44d7b6;
+  --rose: #ff8a80;
+  --sky: #7dc4ff;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Space Grotesk", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(125, 196, 255, 0.18), transparent 28%),
+    radial-gradient(circle at top right, rgba(247, 185, 85, 0.16), transparent 30%),
+    linear-gradient(160deg, #050b14 0%, #09111f 45%, #0b1830 100%);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  width: min(1380px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 28px 0 40px;
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: end;
+  padding: 24px 28px;
+  margin-bottom: 22px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: linear-gradient(135deg, rgba(16, 35, 59, 0.95), rgba(9, 17, 31, 0.88));
+  box-shadow: var(--shadow);
+}
+
+.eyebrow,
+.section-label {
+  margin: 0 0 8px;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.75rem;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 12px;
+  font-size: clamp(2.2rem, 4vw, 4.2rem);
+  line-height: 0.98;
+  max-width: 700px;
+}
+
+.hero-copy,
+.muted {
+  color: var(--muted);
+  max-width: 720px;
+  line-height: 1.6;
+}
+
+.hero-actions,
+.calendar-nav,
+.stack-row,
+.section-head {
+  display: flex;
+  gap: 12px;
+}
+
+.hero-actions {
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(330px, 0.9fr);
+  gap: 22px;
+}
+
+.sidebar {
+  display: grid;
+  gap: 22px;
+}
+
+.card {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--panel);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow);
+}
+
+.card-calendar {
+  min-height: 760px;
+}
+
+.calendar-header,
+.section-head {
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.weekday-row,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.weekday-row {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.weekday-cell {
+  padding: 10px 12px;
+}
+
+.calendar-day {
+  min-height: 112px;
+  padding: 14px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: rgba(19, 34, 56, 0.65);
+  cursor: pointer;
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.calendar-day:hover {
+  transform: translateY(-2px);
+  border-color: rgba(125, 196, 255, 0.42);
+}
+
+.calendar-day.is-other-month {
+  opacity: 0.42;
+}
+
+.calendar-day.is-selected {
+  border-color: rgba(247, 185, 85, 0.95);
+  background: rgba(247, 185, 85, 0.1);
+}
+
+.calendar-day.is-today {
+  outline: 1px solid rgba(68, 215, 182, 0.72);
+}
+
+.day-top,
+.event-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.day-number {
+  font-weight: 700;
+}
+
+.day-count {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.day-preview {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.event-chip,
+.event-item,
+.pill {
+  border-radius: 999px;
+}
+
+.event-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.event-chip.trade,
+.event-item.trade .event-type {
+  color: var(--sky);
+}
+
+.event-chip.deposit,
+.event-item.deposit .event-type {
+  color: var(--mint);
+}
+
+.event-chip.withdrawal,
+.event-item.withdrawal .event-type {
+  color: var(--rose);
+}
+
+.event-chip.transfer,
+.event-item.transfer .event-type {
+  color: var(--gold);
+}
+
+.button,
+.icon-button {
+  border: 0;
+  cursor: pointer;
+}
+
+.button {
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-weight: 700;
+}
+
+.button-primary {
+  color: #0a111f;
+  background: linear-gradient(135deg, var(--gold), #ffd899);
+}
+
+.button-secondary {
+  color: var(--text);
+  background: rgba(125, 196, 255, 0.12);
+  border: 1px solid rgba(125, 196, 255, 0.2);
+}
+
+.button-ghost,
+.icon-button {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+}
+
+.icon-button {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  font-size: 1.2rem;
+}
+
+.pill {
+  padding: 8px 12px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.82rem;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.activity-form,
+.event-list {
+  display: grid;
+  gap: 14px;
+}
+
+.activity-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+input,
+select,
+textarea,
+.json-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+textarea {
+  resize: vertical;
+}
+
+.event-list.empty-state {
+  color: var(--muted);
+}
+
+.event-item {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.event-item h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.event-type {
+  font-family: "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+}
+
+.event-notes {
+  margin-top: 10px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+code {
+  font-family: "IBM Plex Mono", monospace;
+}
+
+@media (max-width: 1120px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .card-calendar {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    width: min(100vw - 20px, 100%);
+    padding-top: 18px;
+  }
+
+  .hero {
+    padding: 20px;
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .weekday-row,
+  .calendar-grid {
+    gap: 8px;
+  }
+
+  .calendar-day {
+    min-height: 92px;
+    padding: 10px;
+  }
+
+  .event-chip {
+    padding: 4px 8px;
+    font-size: 0.72rem;
+  }
+}

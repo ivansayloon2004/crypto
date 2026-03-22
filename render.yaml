@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: crypto-activity-calendar
+    env: node
+    plan: free
+    buildCommand: ""
+    startCommand: "node server.js"

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypto Activity Calendar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Crypto Dashboard</p>
+        <h1>Calendar for all your crypto activity</h1>
+        <p class="hero-copy">
+          Track trades, deposits, withdrawals, and transfers in one timeline.
+          Connect to MEXC through a local backend when you are ready to sync live data.
+        </p>
+      </div>
+      <div class="hero-actions">
+        <button id="todayButton" class="button button-primary">Jump to Today</button>
+        <button id="syncButton" class="button button-secondary">Sync MEXC</button>
+      </div>
+    </header>
+
+    <main class="dashboard">
+      <section class="card card-calendar">
+        <div class="calendar-header">
+          <div>
+            <p class="section-label">Monthly View</p>
+            <h2 id="monthLabel">Month</h2>
+          </div>
+          <div class="calendar-nav">
+            <button id="prevMonthButton" class="icon-button" aria-label="Previous month">&#8592;</button>
+            <button id="nextMonthButton" class="icon-button" aria-label="Next month">&#8594;</button>
+          </div>
+        </div>
+        <div class="weekday-row" id="weekdayRow"></div>
+        <div id="calendarGrid" class="calendar-grid"></div>
+      </section>
+
+      <aside class="sidebar">
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="section-label">Selected Day</p>
+              <h2 id="selectedDateLabel">No day selected</h2>
+            </div>
+            <span id="selectedDateTotal" class="pill">0 events</span>
+          </div>
+          <div id="selectedDateEvents" class="event-list empty-state">
+            Pick a day on the calendar to inspect activity.
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="section-label">Quick Add</p>
+              <h2>Manual Activity</h2>
+            </div>
+          </div>
+          <form id="activityForm" class="activity-form">
+            <label>
+              Date
+              <input type="date" name="date" required />
+            </label>
+            <label>
+              Type
+              <select name="type" required>
+                <option value="trade">Trade</option>
+                <option value="deposit">Deposit</option>
+                <option value="withdrawal">Withdrawal</option>
+                <option value="transfer">Transfer</option>
+              </select>
+            </label>
+            <label>
+              Asset
+              <input type="text" name="asset" placeholder="BTC" required />
+            </label>
+            <label>
+              Amount
+              <input type="number" name="amount" placeholder="0.25" step="0.00000001" required />
+            </label>
+            <label>
+              Notes
+              <textarea name="notes" rows="3" placeholder="Spot buy on dip"></textarea>
+            </label>
+            <button type="submit" class="button button-primary">Save Activity</button>
+          </form>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="section-label">Import</p>
+              <h2>Paste JSON</h2>
+            </div>
+          </div>
+          <p class="muted">
+            Accepts an array of objects with <code>date</code>, <code>type</code>, <code>asset</code>, <code>amount</code>, and optional <code>notes</code>.
+          </p>
+          <textarea id="jsonInput" class="json-input" rows="7" placeholder='[{"date":"2026-03-22","type":"trade","asset":"ETH","amount":1.2,"notes":"Grid bot fill"}]'></textarea>
+          <div class="stack-row">
+            <button id="importButton" class="button button-secondary">Import JSON</button>
+            <button id="resetButton" class="button button-ghost">Reset Demo Data</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="section-label">MEXC</p>
+              <h2>Connect Account</h2>
+            </div>
+          </div>
+          <form id="mexcForm" class="activity-form">
+            <label>
+              API Key
+              <input type="text" name="apiKey" placeholder="Read-only MEXC API key" autocomplete="off" />
+            </label>
+            <label>
+              API Secret
+              <input type="password" name="apiSecret" placeholder="MEXC API secret" autocomplete="off" />
+            </label>
+            <label>
+              API Base URL
+              <input type="text" name="apiBase" value="https://api.mexc.com" />
+            </label>
+            <div class="stack-row">
+              <button type="submit" class="button button-secondary">Save Keys</button>
+              <button type="button" id="clearKeysButton" class="button button-ghost">Clear</button>
+            </div>
+          </form>
+          <p id="syncStatus" class="muted">
+            Add your own MEXC read-only API keys, then press <code>Sync MEXC</code>. Keys stay in your browser until you clear them.
+          </p>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
