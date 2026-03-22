@@ -18,6 +18,10 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
+  <div id="appSplash" class="app-splash">
+    <div class="app-splash-mark">CryptoCal</div>
+    <p class="app-splash-copy">Preparing your trading workspace...</p>
+  </div>
   <div id="loginGate" class="login-gate">
     <section class="login-card">
       <p class="eyebrow">Private Access</p>
@@ -158,8 +162,24 @@
                 <p class="section-label">Trades</p>
                 <h2>Sortable Trade History</h2>
               </div>
+              <div class="stack-row">
+                <button id="exportCsvButton" class="button button-ghost" type="button">Export CSV</button>
+                <button id="exportJsonButton" class="button button-ghost" type="button">Export JSON</button>
+                <button id="printReportButton" class="button button-ghost" type="button">Print Report</button>
+              </div>
             </div>
             <div id="tradeHistoryTable" class="table-shell"></div>
+          </section>
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <p class="section-label">AI Coach</p>
+                <h2>Monthly Review Summary</h2>
+              </div>
+              <button id="runMonthlyAiReviewButton" class="button button-secondary" type="button">Run AI Review</button>
+            </div>
+            <p id="monthlyAiStatus" class="muted">Use AI to summarize the visible month, your wins, mistakes, and patterns.</p>
+            <div id="monthlyAiResult" class="ai-result empty-state">No AI monthly review yet.</div>
           </section>
         </section>
 
@@ -204,6 +224,12 @@
             <button id="toggleLiveChartButton" class="button button-primary" type="button">Live On</button>
             <button id="openChartModalButton" class="button button-ghost" type="button">Full Screen</button>
           </div>
+          <div class="stack-row">
+            <button id="zoomInButton" class="button button-ghost" type="button">Zoom In</button>
+            <button id="zoomOutButton" class="button button-ghost" type="button">Zoom Out</button>
+            <button id="resetViewButton" class="button button-ghost" type="button">Reset View</button>
+            <button id="enableNotificationsButton" class="button button-ghost" type="button">Enable Alerts</button>
+          </div>
           <div class="section-head quick-symbols-head">
             <div>
               <p class="section-label">Quick Symbols</p>
@@ -216,6 +242,23 @@
           </p>
           <div class="market-layout">
             <div class="market-panel">
+              <div class="watchlist-panel">
+                <div class="split-fields">
+                  <label>
+                    Watchlist
+                    <select id="watchlistSelect"></select>
+                  </label>
+                  <label>
+                    New Folder
+                    <input id="watchlistNameInput" type="text" placeholder="Scalp" />
+                  </label>
+                </div>
+                <div class="stack-row">
+                  <button id="createWatchlistButton" class="button button-ghost" type="button">Create Folder</button>
+                  <button id="saveCurrentToWatchlistButton" class="button button-ghost" type="button">Save Current</button>
+                  <button id="deleteWatchlistButton" class="button button-ghost" type="button">Delete Folder</button>
+                </div>
+              </div>
               <label class="market-search-label">
                 Search Pair
                 <input id="marketSearchInput" type="text" placeholder="Search BTC, ETH, SOL..." />

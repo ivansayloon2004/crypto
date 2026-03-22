@@ -5,6 +5,7 @@ const MEXC_SESSION_KEY = "crypto-calendar-mexc-session-v2";
 const FAVORITES_STORAGE_KEY = "crypto-calendar-favorites-v1";
 const ALERTS_STORAGE_KEY = "crypto-calendar-alerts-v1";
 const SYMBOL_JOURNAL_STORAGE_KEY = "crypto-calendar-symbol-journal-v1";
+const WATCHLISTS_STORAGE_KEY = "crypto-calendar-watchlists-v1";
 const API_BASE_URL = window.location.origin;
 const MEXC_MARKET_WS_URL = "wss://wbs-api.mexc.com/ws";
 const LEGACY_DEMO_NOTES = new Set([
@@ -29,6 +30,8 @@ const state = {
   favorites: loadFavorites(),
   alerts: loadAlerts(),
   symbolJournal: loadSymbolJournal(),
+  watchlists: loadWatchlists(),
+  selectedWatchlist: "all",
   tradeHistorySort: {
     key: "executedAt",
     direction: "desc",
@@ -37,6 +40,10 @@ const state = {
   currentSidebarPane: "day",
   user: null,
   profileLoaded: false,
+  chartZoom: 1,
+  chartOffset: 0,
+  chartHoverIndex: -1,
+  chartVisibleSeries: [],
 };
 
 const monthLabel = document.getElementById("monthLabel");
@@ -92,6 +99,15 @@ const marketChartMeta = document.getElementById("marketChartMeta");
 const marketChartPrice = document.getElementById("marketChartPrice");
 const marketChartLiveBadge = document.getElementById("marketChartLiveBadge");
 const marketChartCanvas = document.getElementById("marketChartCanvas");
+const zoomInButton = document.getElementById("zoomInButton");
+const zoomOutButton = document.getElementById("zoomOutButton");
+const resetViewButton = document.getElementById("resetViewButton");
+const enableNotificationsButton = document.getElementById("enableNotificationsButton");
+const watchlistSelect = document.getElementById("watchlistSelect");
+const watchlistNameInput = document.getElementById("watchlistNameInput");
+const createWatchlistButton = document.getElementById("createWatchlistButton");
+const saveCurrentToWatchlistButton = document.getElementById("saveCurrentToWatchlistButton");
+const deleteWatchlistButton = document.getElementById("deleteWatchlistButton");
 const openChartModalButton = document.getElementById("openChartModalButton");
 const chartModal = document.getElementById("chartModal");
 const chartModalBackdrop = document.getElementById("chartModalBackdrop");
@@ -103,6 +119,12 @@ const dailyPnlCanvas = document.getElementById("dailyPnlCanvas");
 const monthlyReviewGrid = document.getElementById("monthlyReviewGrid");
 const symbolPnlTable = document.getElementById("symbolPnlTable");
 const tradeHistoryTable = document.getElementById("tradeHistoryTable");
+const exportCsvButton = document.getElementById("exportCsvButton");
+const exportJsonButton = document.getElementById("exportJsonButton");
+const printReportButton = document.getElementById("printReportButton");
+const runMonthlyAiReviewButton = document.getElementById("runMonthlyAiReviewButton");
+const monthlyAiStatus = document.getElementById("monthlyAiStatus");
+const monthlyAiResult = document.getElementById("monthlyAiResult");
 const chartHoverInfo = document.getElementById("chartHoverInfo");
 const indicatorVolume = document.getElementById("indicatorVolume");
 const indicatorEma20 = document.getElementById("indicatorEma20");
@@ -155,6 +177,7 @@ let marketChartPingTimer = null;
 let marketChartReconnectTimer = null;
 let marketChartSeries = [];
 let marketChartHoverBound = false;
+let marketChartDragState = null;
 let profileSaveTimer = null;
 let installPromptEvent = null;
 const DEFAULT_MARKET_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "BNBUSDT"];
@@ -292,10 +315,22 @@ addAlertButton?.addEventListener("click", seedAlertFormFromCurrentSymbol);
 indicatorVolume?.addEventListener("change", redrawCurrentChart);
 indicatorEma20?.addEventListener("change", redrawCurrentChart);
 indicatorEma50?.addEventListener("change", redrawCurrentChart);
+zoomInButton?.addEventListener("click", () => adjustChartZoom(1.25));
+zoomOutButton?.addEventListener("click", () => adjustChartZoom(0.8));
+resetViewButton?.addEventListener("click", resetChartViewport);
+enableNotificationsButton?.addEventListener("click", enableAlertNotifications);
+watchlistSelect?.addEventListener("change", handleWatchlistChange);
+createWatchlistButton?.addEventListener("click", createWatchlistFolder);
+saveCurrentToWatchlistButton?.addEventListener("click", saveCurrentSymbolToWatchlist);
+deleteWatchlistButton?.addEventListener("click", deleteCurrentWatchlist);
 chartImageInput.addEventListener("change", handleChartPreview);
 openChartModalButton?.addEventListener("click", openChartModal);
 chartModalBackdrop?.addEventListener("click", closeChartModal);
 closeChartModalButton?.addEventListener("click", closeChartModal);
+exportCsvButton?.addEventListener("click", exportTradesCsv);
+exportJsonButton?.addEventListener("click", exportWorkspaceJson);
+printReportButton?.addEventListener("click", () => window.print());
+runMonthlyAiReviewButton?.addEventListener("click", runMonthlyAiReview);
 installAppButton?.addEventListener("click", installPwaApp);
 fieldToggles.forEach((button) => {
   button.addEventListener("click", () => toggleSecretField(button));
@@ -337,6 +372,7 @@ async function bootstrap() {
   registerServiceWorker();
   hydrateMexcForm();
   setDefaultSyncRange();
+  window.setTimeout(() => document.getElementById("appSplash")?.classList.add("is-hidden"), 700);
   const session = await restoreSession();
 
   if (session?.authenticated) {
@@ -389,6 +425,7 @@ function initializeDashboard() {
   renderCalendar();
   renderSelectedDate();
   hydrateDayNoteForm();
+  renderWatchlistOptions();
   renderMarketSymbolChips();
   updateLiveChartUi();
   hydrateSymbolJournal();
@@ -708,6 +745,7 @@ async function hydrateCloudProfile() {
     persistFavorites(true);
     persistAlerts(true);
     persistSymbolJournal(true);
+    persistWatchlists(true);
     state.profileLoaded = true;
   } catch {
     state.profileLoaded = false;
@@ -736,6 +774,7 @@ function mergeCloudProfileIntoState(profile) {
     ...(profile.symbolJournal && typeof profile.symbolJournal === "object" ? profile.symbolJournal : {}),
     ...state.symbolJournal,
   };
+  state.watchlists = sanitizeWatchlists(profile.watchlists && typeof profile.watchlists === "object" ? profile.watchlists : state.watchlists);
 
   const preferences = profile.preferences && typeof profile.preferences === "object" ? profile.preferences : {};
   if (preferences.currentWindow === "overview" || preferences.currentWindow === "markets") {
@@ -749,6 +788,9 @@ function mergeCloudProfileIntoState(profile) {
   }
   if (["favorites", "spot", "futures", "gainers", "losers", "volume"].includes(preferences.marketView)) {
     state.marketView = preferences.marketView;
+  }
+  if (preferences.selectedWatchlist && (preferences.selectedWatchlist === "all" || preferences.selectedWatchlist in state.watchlists)) {
+    state.selectedWatchlist = preferences.selectedWatchlist;
   }
 }
 
@@ -777,11 +819,13 @@ async function saveProfileToCloud() {
     favorites: state.favorites,
     alerts: state.alerts,
     symbolJournal: state.symbolJournal,
+    watchlists: state.watchlists,
     preferences: {
       currentWindow: state.currentWindow,
       currentSidebarPane: state.currentSidebarPane,
       marketType: state.marketType,
       marketView: state.marketView,
+      selectedWatchlist: state.selectedWatchlist,
     },
   };
 
@@ -1084,6 +1128,232 @@ async function submitChartAnalysis(imageDataUrl, context) {
   aiChartResult.textContent = payload.analysis || "No analysis returned.";
 }
 
+async function runMonthlyAiReview() {
+  if (!monthlyAiStatus || !monthlyAiResult) {
+    return;
+  }
+
+  try {
+    const monthKey = `${state.currentMonth.getFullYear()}-${String(state.currentMonth.getMonth() + 1).padStart(2, "0")}`;
+    const monthEvents = state.events.filter((entry) => entry.date.startsWith(monthKey));
+    if (monthEvents.length === 0) {
+      monthlyAiStatus.textContent = "Sync trades for this month first.";
+      monthlyAiResult.textContent = "No AI monthly review yet.";
+      return;
+    }
+
+    monthlyAiStatus.textContent = "Reviewing this month with AI...";
+    monthlyAiResult.textContent = "Summarizing your month...";
+
+    const response = await fetch(`${API_BASE_URL}/api/ai/monthly-review`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        month: monthKey,
+        stats: buildMonthlyAiPayload(monthEvents),
+      }),
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Monthly AI review failed");
+    }
+
+    monthlyAiStatus.textContent = "AI monthly review ready.";
+    monthlyAiResult.textContent = payload.analysis || "No monthly review returned.";
+  } catch (error) {
+    monthlyAiStatus.textContent = `Monthly AI review unavailable: ${error.message}`;
+    monthlyAiResult.textContent = "No AI monthly review yet.";
+  }
+}
+
+function buildMonthlyAiPayload(monthEvents) {
+  const sells = monthEvents.filter((entry) => entry.side === "sell");
+  const wins = sells.filter((entry) => getRealizedPnl(entry) > 0).length;
+  const totalRealized = monthEvents.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
+  const bySymbol = [...groupTradesBySymbol(monthEvents).values()].map((group) => ({
+    symbol: group.symbol,
+    trades: group.trades.length,
+    realized: group.trades.reduce((sum, entry) => sum + getRealizedPnl(entry), 0),
+  }));
+  const notes = Object.entries(state.notesByDate)
+    .filter(([date]) => date.startsWith(`${monthEvents[0]?.date?.slice(0, 7) || ""}`))
+    .map(([date, note]) => ({ date, note }));
+
+  return {
+    totalTrades: monthEvents.length,
+    realizedPnl: totalRealized,
+    sellWinRate: sells.length > 0 ? (wins / sells.length) * 100 : 0,
+    topSymbols: bySymbol.sort((a, b) => Math.abs(b.realized) - Math.abs(a.realized)).slice(0, 8),
+    dayNotes: notes,
+  };
+}
+
+function exportTradesCsv() {
+  const rows = [
+    ["date", "executedAt", "symbol", "side", "amount", "price", "quoteAmount", "realizedPnl"],
+    ...state.events.map((entry) => [
+      entry.date,
+      entry.executedAt || "",
+      entry.asset,
+      entry.side,
+      entry.amount,
+      entry.price,
+      entry.quoteAmount,
+      getRealizedPnl(entry),
+    ]),
+  ];
+  downloadFile(`crypto-trades-${formatDateKey(new Date())}.csv`, rows.map((row) => row.map(csvEscape).join(",")).join("\n"), "text/csv;charset=utf-8");
+}
+
+function exportWorkspaceJson() {
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    events: state.events,
+    notesByDate: state.notesByDate,
+    favorites: state.favorites,
+    alerts: state.alerts,
+    watchlists: state.watchlists,
+    symbolJournal: state.symbolJournal,
+  };
+  downloadFile(`crypto-workspace-${formatDateKey(new Date())}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+}
+
+function csvEscape(value) {
+  const text = String(value ?? "");
+  return /[",\n]/.test(text) ? `"${text.replaceAll("\"", "\"\"")}"` : text;
+}
+
+function downloadFile(name, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function enableAlertNotifications() {
+  if (!("Notification" in window)) {
+    syncStatus.textContent = "This browser does not support notifications.";
+    return;
+  }
+
+  if (Notification.permission === "granted") {
+    syncStatus.textContent = "Notifications are already enabled.";
+    return;
+  }
+
+  const permission = await Notification.requestPermission();
+  syncStatus.textContent = permission === "granted"
+    ? "Notifications enabled for price alerts."
+    : "Notification permission was not granted.";
+}
+
+async function showServiceWorkerNotification(title, body) {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+
+  const registration = await navigator.serviceWorker.getRegistration();
+  if (!registration) {
+    return;
+  }
+
+  await registration.showNotification(title, {
+    body,
+    icon: "/icon.svg",
+    badge: "/icon.svg",
+    tag: "crypto-calendar-alert",
+  });
+}
+
+function renderWatchlistOptions() {
+  if (!watchlistSelect) {
+    return;
+  }
+
+  const names = ["all", ...Object.keys(state.watchlists)];
+  if (!names.includes(state.selectedWatchlist)) {
+    state.selectedWatchlist = "all";
+  }
+
+  watchlistSelect.innerHTML = names.map((name) => `
+    <option value="${escapeHtml(name)}"${name === state.selectedWatchlist ? " selected" : ""}>${escapeHtml(name === "all" ? "All Symbols" : name)}</option>
+  `).join("");
+}
+
+function handleWatchlistChange() {
+  state.selectedWatchlist = String(watchlistSelect?.value || "all");
+  renderMarketList();
+  scheduleProfileSave();
+}
+
+function createWatchlistFolder() {
+  const name = String(watchlistNameInput?.value || "").trim();
+  if (!name) {
+    return;
+  }
+
+  if (!state.watchlists[name]) {
+    state.watchlists[name] = [];
+  }
+  state.selectedWatchlist = name;
+  if (watchlistNameInput) {
+    watchlistNameInput.value = "";
+  }
+  persistWatchlists();
+  renderWatchlistOptions();
+  renderMarketList();
+}
+
+function saveCurrentSymbolToWatchlist() {
+  const listName = state.selectedWatchlist;
+  const symbol = String(marketSymbolInput?.value || "").trim().toUpperCase();
+  if (!symbol || !listName || listName === "all") {
+    syncStatus.textContent = "Choose or create a watchlist folder first.";
+    return;
+  }
+
+  state.watchlists[listName] = [...new Set([...(state.watchlists[listName] || []), symbol])];
+  persistWatchlists();
+  renderWatchlistOptions();
+  renderMarketList();
+  syncStatus.textContent = `${symbol} added to ${listName}.`;
+}
+
+function deleteCurrentWatchlist() {
+  const listName = state.selectedWatchlist;
+  if (!listName || listName === "all") {
+    return;
+  }
+
+  delete state.watchlists[listName];
+  state.selectedWatchlist = "all";
+  persistWatchlists();
+  renderWatchlistOptions();
+  renderMarketList();
+}
+
+function adjustChartZoom(multiplier) {
+  state.chartZoom = Math.min(4, Math.max(1, state.chartZoom * multiplier));
+  state.chartOffset = Math.max(0, Math.min(state.chartOffset, getMaxChartOffset()));
+  redrawCurrentChart();
+}
+
+function resetChartViewport() {
+  state.chartZoom = 1;
+  state.chartOffset = 0;
+  state.chartHoverIndex = -1;
+  redrawCurrentChart();
+}
+
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1120,6 +1390,8 @@ async function loadMarketChart() {
 
     const resolvedSymbol = String(payload.symbol || symbol).toUpperCase();
     marketChartSeries = Array.isArray(payload.klines) ? payload.klines.slice(-80) : [];
+    state.chartOffset = Math.max(0, Math.min(state.chartOffset, getMaxChartOffset()));
+    state.chartHoverIndex = -1;
     drawMarketChart(marketChartSeries, resolvedSymbol, interval);
     if (marketChartMeta) {
       marketChartMeta.textContent = `${capitalize(state.marketType)} market with live MEXC feed.`;
@@ -1265,6 +1537,11 @@ function renderMarketList() {
         String(entry.quoteAsset || "").includes(query)
       );
     });
+
+  if (state.selectedWatchlist !== "all") {
+    const selectedSymbols = state.watchlists[state.selectedWatchlist] || [];
+    filtered = filtered.filter((entry) => selectedSymbols.includes(entry.symbol));
+  }
 
   if (state.marketView === "favorites") {
     filtered = filtered.filter((entry) => state.favorites.includes(entry.symbol));
@@ -1932,16 +2209,33 @@ function bindChartHover(candles, symbol, interval, maxPrice, priceRange, chartHe
   }
 
   marketChartHoverBound = true;
+  marketChartCanvas.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    adjustChartZoom(event.deltaY < 0 ? 1.1 : 0.9);
+  }, { passive: false });
+
+  marketChartCanvas.addEventListener("mousedown", (event) => {
+    marketChartDragState = {
+      startX: event.clientX,
+      startOffset: state.chartOffset,
+    };
+  });
+
+  window.addEventListener("mouseup", () => {
+    marketChartDragState = null;
+  });
+
   marketChartCanvas.addEventListener("mousemove", (event) => {
+    if (marketChartDragState) {
+      const deltaX = event.clientX - marketChartDragState.startX;
+      const shift = Math.round(deltaX / 24);
+      state.chartOffset = Math.max(0, Math.min(getMaxChartOffset(), marketChartDragState.startOffset - shift));
+      redrawCurrentChart();
+      return;
+    }
+
     const activeCandles = Array.isArray(marketChartSeries) && marketChartSeries.length > 0
-      ? marketChartSeries.map((entry) => ({
-          time: Number(entry[0]),
-          open: Number(entry[1]),
-          high: Number(entry[2]),
-          low: Number(entry[3]),
-          close: Number(entry[4]),
-          volume: Number(entry[5] || 0),
-        }))
+      ? state.chartVisibleSeries
       : candles;
 
     if (!Array.isArray(activeCandles) || activeCandles.length === 0) {
@@ -1957,10 +2251,14 @@ function bindChartHover(candles, symbol, interval, maxPrice, priceRange, chartHe
       return;
     }
 
+    state.chartHoverIndex = index;
+    redrawCurrentChart();
     chartHoverInfo.textContent = `${marketSymbolInput.value} ${marketIntervalSelect.value} | ${formatDateTime(candle.time)} | O ${formatCompactPrice(candle.open)} H ${formatCompactPrice(candle.high)} L ${formatCompactPrice(candle.low)} C ${formatCompactPrice(candle.close)} V ${formatCompactVolume(candle.volume)}`;
   });
 
   marketChartCanvas.addEventListener("mouseleave", () => {
+    state.chartHoverIndex = -1;
+    redrawCurrentChart();
     if (chartHoverInfo) {
       chartHoverInfo.textContent = "Hover the chart to inspect candle values.";
     }
@@ -2017,19 +2315,20 @@ function drawCandlesOnCanvas(canvas, klines, symbol, interval) {
     close: Number(entry[4]),
     volume: Number(entry[5] || 0),
   }));
-  const lows = normalized.map((entry) => entry.low);
-  const highs = normalized.map((entry) => entry.high);
+  const visibleCandles = canvas === marketChartCanvas ? getVisibleCandles(normalized) : normalized;
+  const lows = visibleCandles.map((entry) => entry.low);
+  const highs = visibleCandles.map((entry) => entry.high);
   const minPrice = Math.min(...lows);
   const maxPrice = Math.max(...highs);
   const priceRange = Math.max(maxPrice - minPrice, maxPrice * 0.002);
-  const candleWidth = Math.max(4, chartWidth / normalized.length * 0.62);
-  const gap = chartWidth / normalized.length;
+  const candleWidth = Math.max(4, chartWidth / visibleCandles.length * 0.62);
+  const gap = chartWidth / visibleCandles.length;
 
   context.clearRect(0, 0, width, height);
 
   if (indicatorVolume?.checked) {
-    const volumeMax = Math.max(...normalized.map((entry) => entry.volume), 1);
-    normalized.forEach((entry, index) => {
+    const volumeMax = Math.max(...visibleCandles.map((entry) => entry.volume), 1);
+    visibleCandles.forEach((entry, index) => {
       const x = padding.left + gap * index + gap / 2;
       const barHeight = (entry.volume / volumeMax) * 56;
       context.fillStyle = entry.close >= entry.open ? "rgba(68,215,182,0.18)" : "rgba(255,138,128,0.18)";
@@ -2052,7 +2351,7 @@ function drawCandlesOnCanvas(canvas, klines, symbol, interval) {
     context.fillText(formatMoney(price), width - padding.right + 8, y + 4);
   }
 
-  normalized.forEach((entry, index) => {
+  visibleCandles.forEach((entry, index) => {
     const x = padding.left + gap * index + gap / 2;
     const openY = padding.top + ((maxPrice - entry.open) / priceRange) * chartHeight;
     const closeY = padding.top + ((maxPrice - entry.close) / priceRange) * chartHeight;
@@ -2074,15 +2373,20 @@ function drawCandlesOnCanvas(canvas, klines, symbol, interval) {
   });
 
   if (indicatorEma20?.checked) {
-    drawLineSeries(context, calculateEmaSeries(normalized, 20), maxPrice, priceRange, chartHeight, padding, chartWidth, "#f7b955");
+    drawLineSeries(context, calculateEmaSeries(visibleCandles, 20), maxPrice, priceRange, chartHeight, padding, chartWidth, "#f7b955");
   }
   if (indicatorEma50?.checked) {
-    drawLineSeries(context, calculateEmaSeries(normalized, 50), maxPrice, priceRange, chartHeight, padding, chartWidth, "#7dc4ff");
+    drawLineSeries(context, calculateEmaSeries(visibleCandles, 50), maxPrice, priceRange, chartHeight, padding, chartWidth, "#7dc4ff");
   }
 
-  drawTradeMarkers(context, normalized, symbol, maxPrice, priceRange, chartHeight, padding, gap);
+  drawTradeMarkers(context, visibleCandles, symbol, maxPrice, priceRange, chartHeight, padding, gap);
 
-  const last = normalized[normalized.length - 1];
+  if (canvas === marketChartCanvas) {
+    state.chartVisibleSeries = visibleCandles;
+    drawCrosshairOverlay(context, visibleCandles, maxPrice, priceRange, chartHeight, padding, gap);
+  }
+
+  const last = visibleCandles[visibleCandles.length - 1];
   if (canvas === marketChartCanvas && marketChartTitle) {
     marketChartTitle.textContent = `${symbol} ${interval}`;
   }
@@ -2090,8 +2394,41 @@ function drawCandlesOnCanvas(canvas, klines, symbol, interval) {
     marketChartPrice.textContent = `Last: ${formatMoney(last.close)}`;
   }
   if (canvas === marketChartCanvas) {
-    bindChartHover(normalized, symbol, interval, maxPrice, priceRange, chartHeight, padding, gap);
+    bindChartHover(visibleCandles, symbol, interval, maxPrice, priceRange, chartHeight, padding, gap);
   }
+}
+
+function getVisibleCandles(normalized) {
+  const count = Math.max(18, Math.round(normalized.length / state.chartZoom));
+  const maxOffset = Math.max(0, normalized.length - count);
+  const start = Math.min(maxOffset, Math.max(0, state.chartOffset));
+  return normalized.slice(start, start + count);
+}
+
+function getMaxChartOffset() {
+  const count = Math.max(18, Math.round(marketChartSeries.length / state.chartZoom));
+  return Math.max(0, marketChartSeries.length - count);
+}
+
+function drawCrosshairOverlay(context, candles, maxPrice, priceRange, chartHeight, padding, gap) {
+  const index = state.chartHoverIndex;
+  if (index < 0 || index >= candles.length) {
+    return;
+  }
+
+  const candle = candles[index];
+  const x = padding.left + gap * index + gap / 2;
+  const y = padding.top + ((maxPrice - candle.close) / priceRange) * chartHeight;
+  context.save();
+  context.strokeStyle = "rgba(247,185,85,0.5)";
+  context.setLineDash([5, 5]);
+  context.beginPath();
+  context.moveTo(x, padding.top);
+  context.lineTo(x, padding.top + chartHeight);
+  context.moveTo(padding.left, y);
+  context.lineTo(padding.left + gap * candles.length, y);
+  context.stroke();
+  context.restore();
 }
 
 function drawTradeMarkers(context, normalized, symbol, maxPrice, priceRange, chartHeight, padding, gap) {
@@ -2453,6 +2790,34 @@ function persistFavorites(skipCloud = false) {
   }
 }
 
+function loadWatchlists() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(WATCHLISTS_STORAGE_KEY) || "{\"Main\":[]}");
+    return sanitizeWatchlists(parsed);
+  } catch {
+    return { Main: [] };
+  }
+}
+
+function sanitizeWatchlists(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const entries = Object.entries(source).map(([name, symbols]) => [
+    String(name || "").trim(),
+    Array.isArray(symbols) ? [...new Set(symbols.map((entry) => String(entry || "").trim().toUpperCase()).filter(Boolean))] : [],
+  ]).filter(([name]) => Boolean(name));
+  if (entries.length === 0) {
+    return { Main: [] };
+  }
+  return Object.fromEntries(entries);
+}
+
+function persistWatchlists(skipCloud = false) {
+  localStorage.setItem(WATCHLISTS_STORAGE_KEY, JSON.stringify(state.watchlists));
+  if (!skipCloud) {
+    scheduleProfileSave();
+  }
+}
+
 function loadAlerts() {
   try {
     const parsed = JSON.parse(localStorage.getItem(ALERTS_STORAGE_KEY) || "[]");
@@ -2497,6 +2862,7 @@ function dedupeById(items) {
 function notifyAlertTriggered(alert, livePrice) {
   const summary = `${alert.symbol} moved ${alert.direction} ${formatMoney(alert.price)}. Last ${formatMoney(livePrice)}.`;
   playAlertTone();
+  showServiceWorkerNotification("Crypto Calendar Alert", summary).catch(() => {});
 
   if (!("Notification" in window)) {
     return;

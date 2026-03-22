@@ -72,6 +72,10 @@ const server = http.createServer(async (req, res) => {
     return withAuthenticatedUser(req, res, () => handleChartAnalysis(req, res));
   }
 
+  if (req.method === "POST" && requestUrl.pathname === "/api/ai/monthly-review") {
+    return withAuthenticatedUser(req, res, () => handleMonthlyReview(req, res));
+  }
+
   return serveStatic(requestUrl.pathname, res);
 });
 
@@ -217,6 +221,54 @@ async function handleChartAnalysis(req, res) {
 
     const analysis = extractResponseText(payload);
     return sendJson(res, 200, { analysis });
+  } catch (error) {
+    return sendJson(res, 500, { error: error.message });
+  }
+}
+
+async function handleMonthlyReview(req, res) {
+  if (!OPENAI_API_KEY) {
+    return sendJson(res, 500, { error: "Missing OPENAI_API_KEY on server" });
+  }
+
+  const body = await readJsonBody(req);
+  const month = String(body.month || "").trim();
+  const stats = body.stats && typeof body.stats === "object" ? body.stats : {};
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text:
+                  "You are a crypto trading journal coach. Summarize the user's month in short educational sections titled: Highlights, Risk Issues, Best Symbols, Mistakes To Watch, and Next Focus. Do not give personalized financial commands or guaranteed predictions.",
+              },
+              {
+                type: "input_text",
+                text: `Month: ${month || "Unknown"}\nStats: ${JSON.stringify(stats)}`,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error?.message || "OpenAI request failed");
+    }
+
+    return sendJson(res, 200, { analysis: extractResponseText(payload) });
   } catch (error) {
     return sendJson(res, 500, { error: error.message });
   }
@@ -681,6 +733,7 @@ function getDefaultProfile() {
     favorites: [],
     alerts: [],
     symbolJournal: {},
+    watchlists: { Main: [] },
     preferences: {},
     updatedAt: null,
   };
@@ -694,6 +747,7 @@ function sanitizeProfilePayload(profile) {
     favorites: Array.isArray(source.favorites) ? source.favorites : [],
     alerts: Array.isArray(source.alerts) ? source.alerts : [],
     symbolJournal: source.symbolJournal && typeof source.symbolJournal === "object" ? source.symbolJournal : {},
+    watchlists: source.watchlists && typeof source.watchlists === "object" ? source.watchlists : { Main: [] },
     preferences: source.preferences && typeof source.preferences === "object" ? source.preferences : {},
   };
 }

@@ -17,6 +17,8 @@ A deployable public dashboard for tracking crypto activity on a calendar, with u
 - Trade-only sync can use an optional symbol list and date range
 - AI chart screenshot review section for educational analysis
 - Server-side saved profile data for signed-in users
+- Installable PWA app shell with offline fallback
+- Native wrapper starter config for future Android packaging
 
 ## Files
 
@@ -41,6 +43,14 @@ node .\server.js
 5. Enter your MEXC read-only API key and secret in the app
 6. Optionally enter symbols like `BTCUSDT,ETHUSDT` and a sync date range
 7. Press **Sync MEXC**
+
+## App install and mobile path
+
+- The project can now be installed as a PWA from the browser
+- Android users can use the browser install prompt or `Add to Home Screen`
+- iPhone users can use Safari `Share` -> `Add to Home Screen`
+- An `offline.html` fallback page is included for weak or missing internet
+- `capacitor.config.json` is included as a starter path if you later want to wrap this into a native Android app
 
 ## Deploy publicly
 

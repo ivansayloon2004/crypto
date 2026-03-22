@@ -1,0 +1,6 @@
+{
+  "appId": "com.cryptocalendar.app",
+  "appName": "Crypto Calendar",
+  "webDir": ".",
+  "bundledWebRuntime": false
+}
