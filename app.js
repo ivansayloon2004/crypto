@@ -35,9 +35,11 @@ const marketSymbolInput = document.getElementById("marketSymbolInput");
 const marketIntervalSelect = document.getElementById("marketIntervalSelect");
 const loadChartButton = document.getElementById("loadChartButton");
 const useMexcSymbolsButton = document.getElementById("useMexcSymbolsButton");
+const toggleLiveChartButton = document.getElementById("toggleLiveChartButton");
 const marketChartStatus = document.getElementById("marketChartStatus");
 const marketChartTitle = document.getElementById("marketChartTitle");
 const marketChartPrice = document.getElementById("marketChartPrice");
+const marketChartLiveBadge = document.getElementById("marketChartLiveBadge");
 const marketChartCanvas = document.getElementById("marketChartCanvas");
 const aiChartForm = document.getElementById("aiChartForm");
 const chartImageInput = document.getElementById("chartImageInput");
@@ -68,6 +70,10 @@ const statMonthPnl = document.getElementById("statMonthPnl");
 const statMonthPnlSub = document.getElementById("statMonthPnlSub");
 const openPositionsList = document.getElementById("openPositionsList");
 let dashboardInitialized = false;
+let marketChartTimer = null;
+let marketChartLiveEnabled = true;
+let marketChartRefreshMs = 5000;
+let marketChartRequestId = 0;
 
 bootstrap();
 
@@ -153,6 +159,9 @@ if (loadChartButton) {
 if (useMexcSymbolsButton) {
   useMexcSymbolsButton.addEventListener("click", useMexcSymbolsForChart);
 }
+if (toggleLiveChartButton) {
+  toggleLiveChartButton.addEventListener("click", toggleLiveChart);
+}
 chartImageInput.addEventListener("change", handleChartPreview);
 fieldToggles.forEach((button) => {
   button.addEventListener("click", () => toggleSecretField(button));
@@ -166,6 +175,7 @@ mexcForm.addEventListener("submit", (event) => {
 });
 
 aiChartForm.addEventListener("submit", analyzeChartScreenshot);
+document.addEventListener("visibilitychange", handleChartVisibilityChange);
 
 function renderWeekdays() {
   const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -199,6 +209,7 @@ function initializeDashboard() {
   renderCalendar();
   renderSelectedDate();
   hydrateDayNoteForm();
+  updateLiveChartUi();
   loadMarketChart();
 }
 
@@ -728,6 +739,7 @@ async function loadMarketChart() {
 
   const symbol = String(marketSymbolInput.value || "").trim().toUpperCase() || "BTCUSDT";
   const interval = String(marketIntervalSelect.value || "4h").trim();
+  const requestId = ++marketChartRequestId;
   if (marketChartStatus) {
     marketChartStatus.textContent = `Loading ${symbol} ${interval} chart from MEXC...`;
   }
@@ -741,14 +753,25 @@ async function loadMarketChart() {
       throw new Error(payload.error || "Could not load chart");
     }
 
+    if (requestId !== marketChartRequestId) {
+      return;
+    }
+
     drawMarketChart(payload.klines || [], symbol, interval);
     if (marketChartStatus) {
-      marketChartStatus.textContent = `Loaded ${symbol} ${interval} chart from MEXC.`;
+      marketChartStatus.textContent = marketChartLiveEnabled
+        ? `Live ${symbol} ${interval} chart is updating every ${Math.round(marketChartRefreshMs / 1000)}s.`
+        : `Loaded ${symbol} ${interval} chart from MEXC.`;
     }
+    syncMarketChartTimer();
   } catch (error) {
+    if (requestId !== marketChartRequestId) {
+      return;
+    }
     if (marketChartStatus) {
       marketChartStatus.textContent = `Chart unavailable: ${error.message}`;
     }
+    stopLiveMarketChart();
     clearMarketChart();
   }
 }
@@ -861,6 +884,69 @@ function drawMarketChart(klines, symbol, interval) {
   }
   if (marketChartPrice) {
     marketChartPrice.textContent = `Last: ${formatMoney(last.close)}`;
+  }
+}
+
+function toggleLiveChart() {
+  marketChartLiveEnabled = !marketChartLiveEnabled;
+  updateLiveChartUi();
+  syncMarketChartTimer();
+
+  if (marketChartLiveEnabled) {
+    loadMarketChart();
+    return;
+  }
+
+  if (marketChartStatus) {
+    marketChartStatus.textContent = "Live chart paused. Press Live On to resume moving candles.";
+  }
+}
+
+function updateLiveChartUi() {
+  if (toggleLiveChartButton) {
+    toggleLiveChartButton.textContent = marketChartLiveEnabled ? "Live On" : "Live Off";
+    toggleLiveChartButton.className = marketChartLiveEnabled ? "button button-primary" : "button button-ghost";
+  }
+
+  if (marketChartLiveBadge) {
+    marketChartLiveBadge.textContent = marketChartLiveEnabled ? "Live" : "Paused";
+    marketChartLiveBadge.classList.toggle("is-off", !marketChartLiveEnabled);
+  }
+}
+
+function syncMarketChartTimer() {
+  if (!marketChartLiveEnabled || document.hidden) {
+    stopLiveMarketChart();
+    return;
+  }
+
+  if (marketChartTimer) {
+    return;
+  }
+
+  marketChartTimer = window.setInterval(() => {
+    loadMarketChart();
+  }, marketChartRefreshMs);
+}
+
+function stopLiveMarketChart() {
+  if (!marketChartTimer) {
+    return;
+  }
+
+  window.clearInterval(marketChartTimer);
+  marketChartTimer = null;
+}
+
+function handleChartVisibilityChange() {
+  if (document.hidden) {
+    stopLiveMarketChart();
+    return;
+  }
+
+  syncMarketChartTimer();
+  if (marketChartLiveEnabled) {
+    loadMarketChart();
   }
 }
 

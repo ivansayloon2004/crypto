@@ -124,6 +124,7 @@
           <div class="stack-row">
             <button id="loadChartButton" class="button button-secondary" type="button">Load Chart</button>
             <button id="useMexcSymbolsButton" class="button button-ghost" type="button">Use My Sync Symbols</button>
+            <button id="toggleLiveChartButton" class="button button-primary" type="button">Live On</button>
           </div>
           <p id="marketChartStatus" class="muted">
             Load a symbol to view MEXC candlesticks directly in the app.
@@ -131,7 +132,10 @@
           <div class="chart-board">
             <div class="chart-board-head">
               <span id="marketChartTitle">BTCUSDT 4h</span>
-              <span id="marketChartPrice" class="pill">Last: --</span>
+              <div class="chart-board-meta">
+                <span id="marketChartLiveBadge" class="pill pill-live">Live</span>
+                <span id="marketChartPrice" class="pill">Last: --</span>
+              </div>
             </div>
             <canvas id="marketChartCanvas" class="market-chart-canvas" width="980" height="360"></canvas>
           </div>
