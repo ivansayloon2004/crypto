@@ -276,6 +276,68 @@ h1 {
     linear-gradient(180deg, rgba(13, 24, 40, 0.96), rgba(10, 19, 32, 0.92));
   backdrop-filter: blur(16px);
   box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(125, 196, 255, 0.45), transparent);
+  pointer-events: none;
+}
+
+.portfolio-workspace {
+  background:
+    radial-gradient(circle at top right, rgba(68, 215, 182, 0.1), transparent 28%),
+    linear-gradient(180deg, rgba(13, 24, 40, 0.98), rgba(10, 19, 32, 0.94));
+}
+
+.market-terminal {
+  background:
+    radial-gradient(circle at top left, rgba(125, 196, 255, 0.08), transparent 24%),
+    radial-gradient(circle at top right, rgba(247, 185, 85, 0.08), transparent 24%),
+    linear-gradient(180deg, rgba(8, 15, 26, 0.98), rgba(7, 14, 24, 0.98));
+}
+
+.terminal-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.terminal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.terminal-dot:nth-child(1) {
+  background: rgba(255, 138, 128, 0.85);
+}
+
+.terminal-dot:nth-child(2) {
+  background: rgba(247, 185, 85, 0.85);
+}
+
+.terminal-dot:nth-child(3) {
+  background: rgba(68, 215, 182, 0.85);
+}
+
+.terminal-copy {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .mobile-dock {
@@ -334,6 +396,9 @@ h1 {
   border-radius: 20px;
   background:
     linear-gradient(180deg, rgba(8, 15, 26, 0.94), rgba(7, 14, 24, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 16px 36px rgba(0, 0, 0, 0.26);
 }
 
 .nested-card {
@@ -366,6 +431,9 @@ h1 {
   border-radius: 20px;
   background:
     linear-gradient(180deg, rgba(9, 18, 31, 0.98), rgba(8, 16, 28, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 12px 28px rgba(0, 0, 0, 0.18);
 }
 
 .watchlist-panel {
@@ -418,6 +486,7 @@ h1 {
   overflow-y: auto;
   display: grid;
   gap: 8px;
+  mask-image: linear-gradient(180deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
 }
 
 .market-list::-webkit-scrollbar {
@@ -433,7 +502,8 @@ h1 {
   padding: 12px 10px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.025);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
   cursor: pointer;
   transition: transform 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
@@ -447,6 +517,7 @@ h1 {
 .market-row.is-active {
   border-color: rgba(247, 185, 85, 0.95);
   background: linear-gradient(135deg, rgba(247, 185, 85, 0.12), rgba(247, 185, 85, 0.04));
+  box-shadow: 0 12px 24px rgba(247, 185, 85, 0.08);
 }
 
 .market-symbol {
@@ -565,15 +636,23 @@ h1 {
   display: block;
   border-radius: 18px;
   background:
+    radial-gradient(circle at top, rgba(125, 196, 255, 0.08), transparent 32%),
     linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
     linear-gradient(180deg, #07111d, #091628);
   background-size: 100% 25%, 12.5% 100%, auto;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(125, 196, 255, 0.04);
 }
 
 .chart-hover-info {
   margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.8rem;
 }
 
 .performance-grid {
@@ -659,13 +738,15 @@ h1 {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.025);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
 }
 
 .analytics-item strong {
   display: block;
   margin-top: 6px;
   font-size: 1.05rem;
+  letter-spacing: -0.02em;
 }
 
 .compact-form {
@@ -1038,7 +1119,9 @@ textarea {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.025);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+  backdrop-filter: blur(10px);
 }
 
 .chart-preview-wrap.is-hidden {

@@ -2721,14 +2721,14 @@ function bindChartHover(candles, symbol, interval, maxPrice, priceRange, chartHe
 
     state.chartHoverIndex = index;
     redrawCurrentChart();
-  chartHoverInfo.textContent = `${marketSymbolInput.value} ${marketIntervalSelect.value} | ${formatDateTime(candle.time)} | O ${formatCompactPrice(candle.open)} H ${formatCompactPrice(candle.high)} L ${formatCompactPrice(candle.low)} C ${formatCompactPrice(candle.close)} | Vol ${formatCompactVolume(candle.volume)}`;
+    chartHoverInfo.textContent = `${marketSymbolInput.value} ${marketIntervalSelect.value} | ${formatDateTime(candle.time)} | O ${formatCompactPrice(candle.open)} H ${formatCompactPrice(candle.high)} L ${formatCompactPrice(candle.low)} C ${formatCompactPrice(candle.close)} | Vol ${formatCompactVolume(candle.volume)}`;
   });
 
   marketChartCanvas.addEventListener("mouseleave", () => {
     state.chartHoverIndex = -1;
     redrawCurrentChart();
     if (chartHoverInfo) {
-    chartHoverInfo.textContent = "Hover the chart to inspect candle values in PHP.";
+      chartHoverInfo.textContent = "Hover the chart to inspect candle values in PHP.";
     }
   });
 }
