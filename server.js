@@ -68,6 +68,10 @@ const server = http.createServer(async (req, res) => {
     return withAuthenticatedUser(req, res, () => handleMexcMarkets(res, requestUrl));
   }
 
+  if (req.method === "GET" && requestUrl.pathname === "/api/fx/usdt-php") {
+    return withAuthenticatedUser(req, res, () => handleUsdtPhpRate(res));
+  }
+
   if (req.method === "POST" && requestUrl.pathname === "/api/ai/chart-analysis") {
     return withAuthenticatedUser(req, res, () => handleChartAnalysis(req, res));
   }
@@ -413,6 +417,31 @@ async function handleMexcMarkets(res, requestUrl) {
       .sort((left, right) => Number(right.quoteVolume || 0) - Number(left.quoteVolume || 0));
 
     return sendJson(res, 200, { marketType, markets });
+  } catch (error) {
+    return sendJson(res, 500, { error: error.message });
+  }
+}
+
+async function handleUsdtPhpRate(res) {
+  try {
+    const response = await fetch("https://open.er-api.com/v6/latest/USD", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    const payload = await response.json();
+    const rate = Number(payload?.rates?.PHP || 0);
+    if (!response.ok || !rate) {
+      throw new Error(payload?.error || "Could not load PHP rate");
+    }
+    return sendJson(res, 200, {
+      base: "USDT",
+      quote: "PHP",
+      rate,
+      source: "open.er-api.com (USD proxy for USDT)",
+      updatedAt: new Date().toISOString(),
+    });
   } catch (error) {
     return sendJson(res, 500, { error: error.message });
   }

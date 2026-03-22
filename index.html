@@ -195,6 +195,17 @@
               <p id="statMonthPnlSub" class="muted">Realized P/L for visible month</p>
             </article>
           </section>
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <p class="section-label">Portfolio</p>
+                <h2>Snapshot In Pesos</h2>
+              </div>
+              <span id="portfolioRateLabel" class="pill">PHP view</span>
+            </div>
+            <div id="portfolioSnapshotGrid" class="analytics-grid"></div>
+            <div id="portfolioHoldingsList" class="event-list empty-state">No holdings detected yet.</div>
+          </section>
 
           <section class="card card-calendar">
             <div class="calendar-header">
@@ -507,10 +518,11 @@
                     <input id="alertSymbolInput" type="text" placeholder="BTCUSDT" />
                   </label>
                   <label>
-                    Target Price
-                    <input id="alertPriceInput" type="number" step="0.000001" placeholder="70000" />
+                    Target Price (PHP)
+                    <input id="alertPriceInput" type="number" step="0.01" placeholder="3900000" />
                   </label>
                 </div>
+                <p id="alertCurrencyHint" class="muted">Alert targets are entered in pesos and converted automatically in the background.</p>
                 <div class="split-fields">
                   <label>
                     Direction
@@ -684,7 +696,10 @@
                 <input type="number" name="usdtToPhpRate" value="56" min="1" step="0.01" />
               </label>
             </div>
-            <p class="muted">All prices, P/L, and totals will be converted to pesos using this rate.</p>
+            <div class="stack-row">
+              <p id="phpRateStatus" class="muted">All prices, P/L, and totals will be converted to pesos using this rate.</p>
+              <button id="refreshPhpRateButton" type="button" class="button button-ghost">Update Live PHP Rate</button>
+            </div>
             <label class="checkbox-row">
               <input type="checkbox" name="rememberKeys" />
               <span>Remember keys on this device for later</span>

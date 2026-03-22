@@ -191,6 +191,8 @@ const symbolAnalytics = document.getElementById("symbolAnalytics");
 const alertForm = document.getElementById("alertForm");
 const alertsList = document.getElementById("alertsList");
 const alertSymbolInput = document.getElementById("alertSymbolInput");
+const alertPriceInput = document.getElementById("alertPriceInput");
+const alertCurrencyHint = document.getElementById("alertCurrencyHint");
 const symbolJournalForm = document.getElementById("symbolJournalForm");
 const symbolJournalSymbol = document.getElementById("symbolJournalSymbol");
 const symbolJournalNotes = document.getElementById("symbolJournalNotes");
@@ -224,6 +226,11 @@ const statWorstDaySub = document.getElementById("statWorstDaySub");
 const statMonthPnl = document.getElementById("statMonthPnl");
 const statMonthPnlSub = document.getElementById("statMonthPnlSub");
 const openPositionsList = document.getElementById("openPositionsList");
+const portfolioSnapshotGrid = document.getElementById("portfolioSnapshotGrid");
+const portfolioHoldingsList = document.getElementById("portfolioHoldingsList");
+const portfolioRateLabel = document.getElementById("portfolioRateLabel");
+const phpRateStatus = document.getElementById("phpRateStatus");
+const refreshPhpRateButton = document.getElementById("refreshPhpRateButton");
 let dashboardInitialized = false;
 let marketChartTimer = null;
 let marketChartLiveEnabled = true;
@@ -438,6 +445,9 @@ runMonthlyAiReviewButton?.addEventListener("click", runMonthlyAiReview);
 installAppButton?.addEventListener("click", installPwaApp);
 goalsForm?.addEventListener("submit", saveGoals);
 saveHabitButton?.addEventListener("click", saveHabitTagForSelectedDate);
+refreshPhpRateButton?.addEventListener("click", () => {
+  fetchLivePhpRate(true);
+});
 fieldToggles.forEach((button) => {
   button.addEventListener("click", () => toggleSecretField(button));
 });
@@ -549,8 +559,10 @@ function initializeDashboard() {
   updateLiveChartUi();
   renderMarketChartSummary();
   updateMobileTradeBar();
+  updateAlertCurrencyHint();
   hydrateSymbolJournal();
   renderAlerts();
+  renderPortfolioSnapshot();
   renderSymbolAnalytics();
   renderMiniCharts();
   renderPerformanceCharts();
@@ -558,6 +570,7 @@ function initializeDashboard() {
   renderTradeReplay();
   loadMarketCatalog();
   loadMarketChart();
+  fetchLivePhpRate(false);
   switchMainWindow(state.currentWindow || "overview");
   switchSidebarPane(state.currentSidebarPane || "day");
   if (!state.goals.onboardingCompleted) {
@@ -696,6 +709,7 @@ function renderStats() {
   statMonthPnl.className = monthPnl > 0 ? "positive-text" : monthPnl < 0 ? "negative-text" : "";
   statMonthPnlSub.textContent = `${monthEvents.length} trade${monthEvents.length === 1 ? "" : "s"} in ${new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(state.currentMonth)}`;
   renderOpenPositions();
+  renderPortfolioSnapshot();
 }
 
 function renderCalendar() {
@@ -871,9 +885,11 @@ async function syncMexc() {
     state.pricesBySymbol = payload.prices || {};
     recalculateRealizedPnl();
     persistEvents();
+    await fetchLivePhpRate(false);
     renderStats();
     renderCalendar();
     renderSelectedDate();
+    renderPortfolioSnapshot();
     renderSymbolAnalytics();
     renderMiniCharts();
     renderPerformanceCharts();
@@ -1281,6 +1297,53 @@ function applyCurrencyPreferences(config) {
     ? Number(config?.usdtToPhpRate || DEFAULT_USDT_TO_PHP_RATE)
     : DEFAULT_USDT_TO_PHP_RATE;
   scheduleProfileSave();
+}
+
+async function fetchLivePhpRate(showStatus = false) {
+  try {
+    if (showStatus && phpRateStatus) {
+      phpRateStatus.textContent = "Updating live PHP rate...";
+    }
+    const response = await fetch(`${API_BASE_URL}/api/fx/usdt-php`, {
+      credentials: "same-origin",
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not update PHP rate");
+    }
+    const nextRate = Number(payload.rate || 0);
+    if (nextRate > 0) {
+      state.usdtToPhpRate = nextRate;
+      if (mexcForm?.elements?.usdtToPhpRate) {
+        mexcForm.elements.usdtToPhpRate.value = String(nextRate);
+      }
+      persistMexcConfig(readMexcForm());
+      renderMarketChartSummary();
+      updateAlertCurrencyHint();
+      renderStats();
+      renderCalendar();
+      renderSelectedDate();
+      renderOpenPositions();
+      renderPortfolioSnapshot();
+      renderAlerts();
+      renderSymbolAnalytics();
+      renderPerformanceCharts();
+      renderMiniCharts();
+      if (phpRateStatus) {
+        phpRateStatus.textContent = `Live PHP rate updated: 1 USDT ≈ ${formatPlainNumber(nextRate, 2)} PHP.`;
+      }
+    }
+  } catch (error) {
+    if (showStatus && phpRateStatus) {
+      phpRateStatus.textContent = `Live PHP rate unavailable: ${error.message}`;
+    }
+  }
+}
+
+function updateAlertCurrencyHint() {
+  if (alertCurrencyHint) {
+    alertCurrencyHint.textContent = `Alert targets are entered in pesos and converted automatically using 1 USDT ≈ ${formatPlainNumber(state.usdtToPhpRate, 2)} PHP.`;
+  }
 }
 
 function toggleSecretField(button) {
@@ -1960,23 +2023,28 @@ function seedAlertFormFromCurrentSymbol() {
   }
 
   alertSymbolInput.value = String(marketSymbolInput?.value || "").trim().toUpperCase();
-  document.getElementById("alertPriceInput").value = String(getLastChartPrice() || "");
+  if (alertPriceInput) {
+    alertPriceInput.value = formatInputDecimal(convertQuoteToFiat(getLastChartPrice() || 0), 2);
+  }
 }
 
 function saveAlert(event) {
   event.preventDefault();
   const symbol = String(alertSymbolInput?.value || "").trim().toUpperCase();
-  const price = Number(document.getElementById("alertPriceInput")?.value || 0);
+  const targetPhp = Number(alertPriceInput?.value || 0);
   const direction = String(document.getElementById("alertDirectionSelect")?.value || "above");
   const note = String(document.getElementById("alertNoteInput")?.value || "").trim();
-  if (!symbol || !price) {
+  if (!symbol || !targetPhp) {
     return;
   }
+
+  const price = targetPhp / Math.max(Number(state.usdtToPhpRate || DEFAULT_USDT_TO_PHP_RATE), 0.0001);
 
   state.alerts.push({
     id: crypto.randomUUID(),
     symbol,
     price,
+    targetPhp,
     direction,
     note,
     marketType: state.marketType,
@@ -2007,7 +2075,7 @@ function renderAlerts() {
             <span class="event-type">${escapeHtml(alert.direction)}</span>
             <span>${escapeHtml(alert.symbol)}</span>
           </div>
-          <div class="event-notes">${formatMoney(alert.price)} ${alert.note ? `- ${escapeHtml(alert.note)}` : ""}</div>
+          <div class="event-notes">${formatMoney(alert.price)} <span class="muted">(${formatPlainNumber(alert.price, 6)} USDT)</span> ${alert.note ? `- ${escapeHtml(alert.note)}` : ""}</div>
         </div>
         <button class="delete-button" type="button" data-alert-id="${escapeHtml(alert.id)}">${alert.triggered ? "Triggered" : "Delete"}</button>
       </div>
@@ -3693,6 +3761,14 @@ function formatPlainNumber(value, maximumFractionDigits = 2) {
   return numeric.toLocaleString("en-US", { maximumFractionDigits });
 }
 
+function formatInputDecimal(value, maximumFractionDigits = 2) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric)) {
+    return "";
+  }
+  return numeric.toFixed(maximumFractionDigits);
+}
+
 function getMoneyDisplayLabel() {
   return `${state.fiatCurrency || DEFAULT_FIAT_CURRENCY} view (${formatPlainNumber(state.usdtToPhpRate, 2)} PHP per USDT)`;
 }
@@ -3704,6 +3780,59 @@ function renderMarketChartSummary() {
   if (mobileTradeMeta) {
     mobileTradeMeta.textContent = getMoneyDisplayLabel();
   }
+  if (portfolioRateLabel) {
+    portfolioRateLabel.textContent = getMoneyDisplayLabel();
+  }
+}
+
+function renderPortfolioSnapshot() {
+  if (!portfolioSnapshotGrid || !portfolioHoldingsList) {
+    return;
+  }
+
+  const openPositions = [...state.openPositions];
+  const totalMarketValue = openPositions.reduce((sum, entry) => sum + Number(entry.marketValue || 0), 0);
+  const totalCost = openPositions.reduce((sum, entry) => sum + Number(entry.totalCost || 0), 0);
+  const totalUnrealized = openPositions.reduce((sum, entry) => sum + Number(entry.unrealizedPnl || 0), 0);
+  const totalRealized = state.events.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
+
+  portfolioSnapshotGrid.innerHTML = [
+    ["Portfolio Value", formatMoney(totalMarketValue)],
+    ["Cost Basis", formatMoney(totalCost)],
+    ["Unrealized P/L", formatSignedMoney(totalUnrealized)],
+    ["Realized P/L", formatSignedMoney(totalRealized)],
+    ["Open Positions", String(openPositions.length)],
+    ["Tracked Symbols", String(new Set(openPositions.map((entry) => entry.symbol)).size)],
+  ].map(([label, value]) => `
+    <article class="analytics-item">
+      <span class="muted">${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </article>
+  `).join("");
+
+  if (openPositions.length === 0) {
+    portfolioHoldingsList.className = "event-list empty-state";
+    portfolioHoldingsList.textContent = "No holdings detected yet.";
+    return;
+  }
+
+  portfolioHoldingsList.className = "event-list";
+  portfolioHoldingsList.innerHTML = openPositions
+    .sort((left, right) => Number(right.marketValue || 0) - Number(left.marketValue || 0))
+    .map((position) => `
+      <article class="event-item">
+        <div class="event-meta">
+          <span class="event-type">holding</span>
+          <span>${escapeHtml(position.symbol)}</span>
+        </div>
+        <h3>${formatAmount(position.quantity)} ${escapeHtml(position.symbol)}</h3>
+        <div class="trade-stats">
+          <span>Value: ${formatMoney(position.marketValue)}</span>
+          <span>Cost: ${formatMoney(position.totalCost)}</span>
+          <span class="${position.unrealizedPnl >= 0 ? "positive-text" : "negative-text"}">Unrealized: ${formatSignedMoney(position.unrealizedPnl)}</span>
+        </div>
+      </article>
+    `).join("");
 }
 
 function formatCompactVolume(value) {
