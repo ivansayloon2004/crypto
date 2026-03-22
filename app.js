@@ -32,6 +32,10 @@ const state = {
 };
 
 const monthLabel = document.getElementById("monthLabel");
+const overviewWindowTab = document.getElementById("overviewWindowTab");
+const marketsWindowTab = document.getElementById("marketsWindowTab");
+const overviewWindow = document.getElementById("overviewWindow");
+const marketsWindow = document.getElementById("marketsWindow");
 const calendarGrid = document.getElementById("calendarGrid");
 const weekdayRow = document.getElementById("weekdayRow");
 const selectedDateLabel = document.getElementById("selectedDateLabel");
@@ -118,6 +122,9 @@ let marketChartHoverBound = false;
 const DEFAULT_MARKET_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "BNBUSDT"];
 
 bootstrap();
+
+overviewWindowTab?.addEventListener("click", () => switchMainWindow("overview"));
+marketsWindowTab?.addEventListener("click", () => switchMainWindow("markets"));
 
 document.getElementById("prevMonthButton").addEventListener("click", () => {
   state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() - 1, 1);
@@ -279,6 +286,15 @@ function initializeDashboard() {
   renderMiniCharts();
   loadMarketCatalog();
   loadMarketChart();
+  switchMainWindow("overview");
+}
+
+function switchMainWindow(view) {
+  const isOverview = view === "overview";
+  overviewWindow?.classList.toggle("is-active", isOverview);
+  marketsWindow?.classList.toggle("is-active", !isOverview);
+  overviewWindowTab.className = isOverview ? "button button-primary" : "button button-ghost";
+  marketsWindowTab.className = isOverview ? "button button-ghost" : "button button-primary";
 }
 
 function renderStats() {

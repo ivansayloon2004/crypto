@@ -47,54 +47,62 @@
 
     <main class="dashboard">
       <section class="main-column">
-        <section class="stats-grid" id="statsGrid">
-          <article class="card stat-card">
-            <p class="section-label">Realized P/L</p>
-            <h2 id="statRealizedPnl">0.00</h2>
-            <p id="statRealizedPnlSub" class="muted">Across all synced trades</p>
-          </article>
-          <article class="card stat-card">
-            <p class="section-label">Trade Count</p>
-            <h2 id="statTradeCount">0</h2>
-            <p id="statTradeCountSub" class="muted">Total closed and open trades</p>
-          </article>
-          <article class="card stat-card">
-            <p class="section-label">Win Rate</p>
-            <h2 id="statWinRate">0%</h2>
-            <p id="statWinRateSub" class="muted">Based on realized winning sells</p>
-          </article>
-          <article class="card stat-card">
-            <p class="section-label">Best Day</p>
-            <h2 id="statBestDay">None</h2>
-            <p id="statBestDaySub" class="muted">No realized results yet</p>
-          </article>
-          <article class="card stat-card">
-            <p class="section-label">Worst Day</p>
-            <h2 id="statWorstDay">None</h2>
-            <p id="statWorstDaySub" class="muted">No realized results yet</p>
-          </article>
-          <article class="card stat-card">
-            <p class="section-label">This Month</p>
-            <h2 id="statMonthPnl">0.00</h2>
-            <p id="statMonthPnlSub" class="muted">Realized P/L for visible month</p>
-          </article>
+        <div class="window-tabs">
+          <button id="overviewWindowTab" class="button button-primary" type="button">Overview</button>
+          <button id="marketsWindowTab" class="button button-ghost" type="button">Markets</button>
+        </div>
+
+        <section id="overviewWindow" class="window-pane is-active">
+          <section class="stats-grid" id="statsGrid">
+            <article class="card stat-card">
+              <p class="section-label">Realized P/L</p>
+              <h2 id="statRealizedPnl">0.00</h2>
+              <p id="statRealizedPnlSub" class="muted">Across all synced trades</p>
+            </article>
+            <article class="card stat-card">
+              <p class="section-label">Trade Count</p>
+              <h2 id="statTradeCount">0</h2>
+              <p id="statTradeCountSub" class="muted">Total closed and open trades</p>
+            </article>
+            <article class="card stat-card">
+              <p class="section-label">Win Rate</p>
+              <h2 id="statWinRate">0%</h2>
+              <p id="statWinRateSub" class="muted">Based on realized winning sells</p>
+            </article>
+            <article class="card stat-card">
+              <p class="section-label">Best Day</p>
+              <h2 id="statBestDay">None</h2>
+              <p id="statBestDaySub" class="muted">No realized results yet</p>
+            </article>
+            <article class="card stat-card">
+              <p class="section-label">Worst Day</p>
+              <h2 id="statWorstDay">None</h2>
+              <p id="statWorstDaySub" class="muted">No realized results yet</p>
+            </article>
+            <article class="card stat-card">
+              <p class="section-label">This Month</p>
+              <h2 id="statMonthPnl">0.00</h2>
+              <p id="statMonthPnlSub" class="muted">Realized P/L for visible month</p>
+            </article>
+          </section>
+
+          <section class="card card-calendar">
+            <div class="calendar-header">
+              <div>
+                <p class="section-label">Monthly View</p>
+                <h2 id="monthLabel">Month</h2>
+              </div>
+              <div class="calendar-nav">
+                <button id="prevMonthButton" class="icon-button" aria-label="Previous month">&#8592;</button>
+                <button id="nextMonthButton" class="icon-button" aria-label="Next month">&#8594;</button>
+              </div>
+            </div>
+            <div class="weekday-row" id="weekdayRow"></div>
+            <div id="calendarGrid" class="calendar-grid"></div>
+          </section>
         </section>
 
-        <section class="card card-calendar">
-          <div class="calendar-header">
-            <div>
-              <p class="section-label">Monthly View</p>
-              <h2 id="monthLabel">Month</h2>
-            </div>
-            <div class="calendar-nav">
-              <button id="prevMonthButton" class="icon-button" aria-label="Previous month">&#8592;</button>
-              <button id="nextMonthButton" class="icon-button" aria-label="Next month">&#8594;</button>
-            </div>
-          </div>
-          <div class="weekday-row" id="weekdayRow"></div>
-          <div id="calendarGrid" class="calendar-grid"></div>
-        </section>
-
+        <section id="marketsWindow" class="window-pane">
         <section class="card">
           <div class="section-head">
             <div>
@@ -267,6 +275,7 @@
               </form>
             </section>
           </div>
+        </section>
         </section>
       </section>
 
