@@ -1974,10 +1974,10 @@ function openSymbolDrawer(symbol) {
   }
   if (symbolDrawerStats) {
     symbolDrawerStats.innerHTML = [
-      ["Last Price", formatCompactPrice(Number(market?.lastPrice || getLastChartPrice() || 0))],
+      ["Last Price (PHP)", formatCompactPrice(Number(market?.lastPrice || getLastChartPrice() || 0))],
       ["24H Change", formatPercent(Number(market?.priceChangePercent || 0))],
       ["Trades", String(trades.length)],
-      ["Realized", formatSignedMoney(realized)],
+      ["Realized P/L (PHP)", formatSignedMoney(realized)],
       ["Open Qty", formatAmount(position?.quantity || 0)],
       ["Volume", formatCompactVolume(Number(market?.quoteVolume || 0))],
     ].map(([label, value]) => `
@@ -2136,11 +2136,11 @@ function renderSymbolAnalytics() {
 
   symbolAnalytics.innerHTML = [
     ["Trades", String(trades.length)],
-    ["Realized P/L", formatSignedMoney(realized)],
+    ["Realized P/L (PHP)", formatSignedMoney(realized)],
     ["Win Rate", sells.length > 0 ? `${((wins / sells.length) * 100).toFixed(1)}%` : "0.0%"],
     ["Open Qty", position ? formatAmount(position.quantity) : "0"],
-    ["Avg Cost", position ? formatMoney(position.averageCost) : formatMoney(0)],
-    ["Unrealized", position ? formatSignedMoney(position.unrealizedPnl) : formatSignedMoney(0)],
+    ["Avg Cost (PHP)", position ? formatMoney(position.averageCost) : formatMoney(0)],
+    ["Unrealized P/L (PHP)", position ? formatSignedMoney(position.unrealizedPnl) : formatSignedMoney(0)],
   ].map(([label, value]) => `
     <article class="analytics-item">
       <span class="muted">${escapeHtml(label)}</span>
@@ -2721,14 +2721,14 @@ function bindChartHover(candles, symbol, interval, maxPrice, priceRange, chartHe
 
     state.chartHoverIndex = index;
     redrawCurrentChart();
-    chartHoverInfo.textContent = `${marketSymbolInput.value} ${marketIntervalSelect.value} | ${formatDateTime(candle.time)} | O ${formatCompactPrice(candle.open)} H ${formatCompactPrice(candle.high)} L ${formatCompactPrice(candle.low)} C ${formatCompactPrice(candle.close)} V ${formatCompactVolume(candle.volume)}`;
+  chartHoverInfo.textContent = `${marketSymbolInput.value} ${marketIntervalSelect.value} | ${formatDateTime(candle.time)} | O ${formatCompactPrice(candle.open)} H ${formatCompactPrice(candle.high)} L ${formatCompactPrice(candle.low)} C ${formatCompactPrice(candle.close)} | Vol ${formatCompactVolume(candle.volume)}`;
   });
 
   marketChartCanvas.addEventListener("mouseleave", () => {
     state.chartHoverIndex = -1;
     redrawCurrentChart();
     if (chartHoverInfo) {
-      chartHoverInfo.textContent = "Hover the chart to inspect candle values.";
+    chartHoverInfo.textContent = "Hover the chart to inspect candle values in PHP.";
     }
   });
 }
@@ -2744,7 +2744,7 @@ function clearMarketChart() {
     marketChartTitle.textContent = "Chart unavailable";
   }
   if (marketChartPrice) {
-    marketChartPrice.textContent = "Last: --";
+    marketChartPrice.textContent = "Last (PHP): --";
   }
   marketChartSeries = [];
 }
@@ -2859,7 +2859,7 @@ function drawCandlesOnCanvas(canvas, klines, symbol, interval) {
     marketChartTitle.textContent = `${symbol} ${interval}`;
   }
   if (canvas === marketChartCanvas && marketChartPrice) {
-    marketChartPrice.textContent = `Last: ${formatMoney(last.close)}`;
+    marketChartPrice.textContent = `Last (PHP): ${formatMoney(last.close)}`;
   }
   if (canvas === marketChartCanvas) {
     bindChartHover(visibleCandles, symbol, interval, maxPrice, priceRange, chartHeight, padding, gap);
@@ -3796,14 +3796,20 @@ function renderPortfolioSnapshot() {
   const totalCost = openPositions.reduce((sum, entry) => sum + Number(entry.totalCost || 0), 0);
   const totalUnrealized = openPositions.reduce((sum, entry) => sum + Number(entry.unrealizedPnl || 0), 0);
   const totalRealized = state.events.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
+  const totalFees = state.events.reduce((sum, entry) => sum + estimateFeeInQuote(entry), 0);
+  const largestHolding = openPositions.length > 0
+    ? [...openPositions].sort((left, right) => Number(right.marketValue || 0) - Number(left.marketValue || 0))[0]
+    : null;
 
   portfolioSnapshotGrid.innerHTML = [
-    ["Portfolio Value", formatMoney(totalMarketValue)],
-    ["Cost Basis", formatMoney(totalCost)],
-    ["Unrealized P/L", formatSignedMoney(totalUnrealized)],
-    ["Realized P/L", formatSignedMoney(totalRealized)],
+    ["Portfolio Value (PHP)", formatMoney(totalMarketValue)],
+    ["Cost Basis (PHP)", formatMoney(totalCost)],
+    ["Unrealized P/L (PHP)", formatSignedMoney(totalUnrealized)],
+    ["Realized P/L (PHP)", formatSignedMoney(totalRealized)],
+    ["Fees (PHP)", formatMoney(totalFees)],
     ["Open Positions", String(openPositions.length)],
     ["Tracked Symbols", String(new Set(openPositions.map((entry) => entry.symbol)).size)],
+    ["Top Allocation", largestHolding ? `${largestHolding.symbol} ${formatAllocationShare(largestHolding.marketValue, totalMarketValue)}` : "No holdings yet"],
   ].map(([label, value]) => `
     <article class="analytics-item">
       <span class="muted">${escapeHtml(label)}</span>
@@ -3828,12 +3834,39 @@ function renderPortfolioSnapshot() {
         </div>
         <h3>${formatAmount(position.quantity)} ${escapeHtml(position.symbol)}</h3>
         <div class="trade-stats">
-          <span>Value: ${formatMoney(position.marketValue)}</span>
-          <span>Cost: ${formatMoney(position.totalCost)}</span>
-          <span class="${position.unrealizedPnl >= 0 ? "positive-text" : "negative-text"}">Unrealized: ${formatSignedMoney(position.unrealizedPnl)}</span>
+          <span>Allocation: ${formatAllocationShare(position.marketValue, totalMarketValue)}</span>
+          <span>Value (PHP): ${formatMoney(position.marketValue)}</span>
+          <span>Cost (PHP): ${formatMoney(position.totalCost)}</span>
+          <span class="${position.unrealizedPnl >= 0 ? "positive-text" : "negative-text"}">Unrealized (PHP): ${formatSignedMoney(position.unrealizedPnl)}</span>
         </div>
       </article>
     `).join("");
+}
+
+function formatAllocationShare(value, total) {
+  const numericValue = Number(value || 0);
+  const numericTotal = Number(total || 0);
+  if (!numericTotal) {
+    return "0.0%";
+  }
+  return `${((numericValue / numericTotal) * 100).toFixed(1)}%`;
+}
+
+function estimateFeeInQuote(entry) {
+  const fee = Number(entry?.fee || 0);
+  if (!fee) {
+    return 0;
+  }
+  const feeAsset = String(entry?.feeAsset || "").toUpperCase();
+  const baseAsset = String(entry?.baseAsset || entry?.asset || "").toUpperCase();
+  const price = Number(entry?.price || 0);
+  if (!feeAsset) {
+    return fee;
+  }
+  if (feeAsset === baseAsset) {
+    return fee * price;
+  }
+  return fee;
 }
 
 function formatCompactVolume(value) {
@@ -3921,10 +3954,10 @@ function renderOpenPositions() {
         </div>
         <h3>${formatAmount(position.quantity)} ${escapeHtml(position.symbol)}</h3>
         <div class="trade-stats">
-          <span>Avg Cost: ${formatMoney(position.averageCost)}</span>
-          <span>Last Price: ${position.marketPrice > 0 ? formatMoney(position.marketPrice) : "N/A"}</span>
-          <span>Value: ${position.marketPrice > 0 ? formatMoney(position.marketValue) : "N/A"}</span>
-          <span class="${position.unrealizedPnl >= 0 ? "positive-text" : "negative-text"}">Unrealized P/L: ${formatSignedMoney(position.unrealizedPnl)}</span>
+          <span>Avg Cost (PHP): ${formatMoney(position.averageCost)}</span>
+          <span>Last Price (PHP): ${position.marketPrice > 0 ? formatMoney(position.marketPrice) : "N/A"}</span>
+          <span>Value (PHP): ${position.marketPrice > 0 ? formatMoney(position.marketValue) : "N/A"}</span>
+          <span class="${position.unrealizedPnl >= 0 ? "positive-text" : "negative-text"}">Unrealized P/L (PHP): ${formatSignedMoney(position.unrealizedPnl)}</span>
         </div>
       </article>
     `)
