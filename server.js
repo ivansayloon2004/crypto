@@ -53,9 +53,7 @@ async function handleMexcActivity(req, res) {
   }
 
   try {
-    const [deposits, withdrawals, account, exchangeInfo] = await Promise.all([
-      signedGet({ endpoint: "/api/v3/capital/deposit/hisrec", params: { limit: "50" }, apiKey, apiSecret, apiBase }),
-      signedGet({ endpoint: "/api/v3/capital/withdraw/history", params: { limit: "50" }, apiKey, apiSecret, apiBase }),
+    const [account, exchangeInfo] = await Promise.all([
       signedGet({ endpoint: "/api/v3/account", params: {}, apiKey, apiSecret, apiBase }),
       publicGet({ endpoint: "/api/v3/exchangeInfo", apiBase }),
     ]);
@@ -69,14 +67,7 @@ async function handleMexcActivity(req, res) {
       timeRange,
     });
 
-    const activities = [
-      ...mapDepositHistory(deposits),
-      ...mapWithdrawalHistory(withdrawals),
-      ...mapBalances(account),
-      ...tradeActivity,
-    ];
-
-    return sendJson(res, 200, { activities });
+    return sendJson(res, 200, { activities: tradeActivity });
   } catch (error) {
     return sendJson(res, 500, { error: error.message });
   }
@@ -121,54 +112,6 @@ async function publicGet({ endpoint, apiBase }) {
   }
 
   return payload;
-}
-
-function mapDepositHistory(payload) {
-  if (!Array.isArray(payload)) {
-    return [];
-  }
-
-  return payload.map((entry) => ({
-    id: entry.id || `deposit-${entry.txId || entry.insertTime}`,
-    date: toDateKey(entry.insertTime),
-    type: "deposit",
-    asset: entry.coin,
-    amount: Number(entry.amount || 0),
-    notes: `Deposit on ${entry.network || "unknown network"}`,
-  }));
-}
-
-function mapWithdrawalHistory(payload) {
-  if (!Array.isArray(payload)) {
-    return [];
-  }
-
-  return payload.map((entry) => ({
-    id: entry.id || `withdrawal-${entry.txId || entry.applyTime}`,
-    date: toDateKey(entry.applyTime),
-    type: "withdrawal",
-    asset: entry.coin,
-    amount: Number(entry.amount || 0),
-    notes: `Withdrawal on ${entry.network || "unknown network"}`,
-  }));
-}
-
-function mapBalances(payload) {
-  if (!payload || !Array.isArray(payload.balances)) {
-    return [];
-  }
-
-  return payload.balances
-    .filter((entry) => Number(entry.free || 0) > 0 || Number(entry.locked || 0) > 0)
-    .slice(0, 15)
-    .map((entry) => ({
-      id: `balance-${entry.asset}`,
-      date: toDateKey(Date.now()),
-      type: "transfer",
-      asset: entry.asset,
-      amount: Number(entry.free || 0) + Number(entry.locked || 0),
-      notes: "Current balance snapshot from MEXC account",
-    }));
 }
 
 async function fetchTradeActivity({ apiKey, apiSecret, apiBase, account, exchangeInfo, symbols, timeRange }) {

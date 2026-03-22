@@ -14,7 +14,7 @@ const LEGACY_DEMO_NOTES = new Set([
 const state = {
   currentMonth: new Date(),
   selectedDate: formatDateKey(new Date()),
-  events: loadEvents(),
+  events: loadEvents().filter((entry) => entry.type === "trade"),
 };
 
 const monthLabel = document.getElementById("monthLabel");
@@ -203,7 +203,7 @@ function renderSelectedDate() {
 }
 
 async function syncMexc() {
-  syncStatus.textContent = "Syncing your MEXC deposits, withdrawals, balances, and recent trades...";
+  syncStatus.textContent = "Syncing only your MEXC trades...";
 
   try {
     const config = readMexcForm();
@@ -233,12 +233,12 @@ async function syncMexc() {
       throw new Error(payload.error || "Sync request failed");
     }
 
-    const normalized = payload.activities.map(normalizeEvent);
-    state.events = mergeEvents(state.events, normalized);
+    const normalized = payload.activities.map(normalizeEvent).filter((entry) => entry.type === "trade");
+    state.events = mergeEvents(state.events.filter((entry) => entry.type === "trade"), normalized);
     persistEvents();
     renderCalendar();
     renderSelectedDate();
-    syncStatus.textContent = `Synced ${normalized.length} activities from MEXC.`;
+    syncStatus.textContent = `Synced ${normalized.length} trades from MEXC.`;
   } catch (error) {
     syncStatus.textContent = `MEXC sync unavailable: ${error.message}`;
   }
@@ -259,7 +259,7 @@ function loadEvents() {
 
     const cleaned = parsed
       .map(normalizeEvent)
-      .filter((entry) => !isLegacyDemoEvent(entry));
+      .filter((entry) => !isLegacyDemoEvent(entry) && entry.type === "trade");
     if (cleaned.length !== parsed.length) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
     }

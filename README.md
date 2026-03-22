@@ -4,7 +4,7 @@ A deployable public dashboard for tracking crypto activity on a calendar, with u
 
 ## What you get
 
-- Monthly calendar with per-day event previews
+- Monthly calendar with per-day trade previews
 - Activity detail panel for selected dates
 - Manual entry form for trades, deposits, withdrawals, and transfers
 - JSON import for bulk activity
@@ -13,7 +13,7 @@ A deployable public dashboard for tracking crypto activity on a calendar, with u
 - Per-user MEXC connection flow using keys entered in the browser
 - API key and API secret fields are masked with show/hide toggles
 - MEXC keys default to session-only storage unless the user explicitly chooses to remember them
-- Trade sync can use an optional symbol list and date range
+- Trade-only sync can use an optional symbol list and date range
 
 ## Files
 
@@ -83,6 +83,6 @@ git push -u origin main
 ## MEXC notes
 
 - The backend currently pulls deposit history, withdrawal history, and a current balance snapshot.
-- The backend now also makes a best-effort pull of recent spot trade history using MEXC V3 `GET /api/v3/myTrades`.
+- The backend pulls only recent spot trade history using MEXC V3 `GET /api/v3/myTrades`.
 - MEXC's trade-history endpoint requires a `symbol` and only returns up to roughly the past 1 month, so this app now lets users specify symbols and a date window. If they leave symbols blank, the app infers likely symbols from non-zero balances and supported exchange pairs. That means it may still miss older trades or trades in assets no longer held.
 - Use read-only API keys whenever possible.
