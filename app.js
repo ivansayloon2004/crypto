@@ -159,8 +159,11 @@ const symbolPnlTable = document.getElementById("symbolPnlTable");
 const tradeHistoryTable = document.getElementById("tradeHistoryTable");
 const riskMetricsGrid = document.getElementById("riskMetricsGrid");
 const insightsGrid = document.getElementById("insightsGrid");
+const strategyLabTable = document.getElementById("strategyLabTable");
+const redFlagGrid = document.getElementById("redFlagGrid");
 const symbolPerformanceTable = document.getElementById("symbolPerformanceTable");
 const tradeReplayPanel = document.getElementById("tradeReplayPanel");
+const tradeStoryPanel = document.getElementById("tradeStoryPanel");
 const filterSymbolInput = document.getElementById("filterSymbolInput");
 const filterSideSelect = document.getElementById("filterSideSelect");
 const filterResultSelect = document.getElementById("filterResultSelect");
@@ -567,6 +570,7 @@ function initializeDashboard() {
   renderMiniCharts();
   renderPerformanceCharts();
   renderHabitSummary();
+  renderTradeStory();
   renderTradeReplay();
   loadMarketCatalog();
   loadMarketChart();
@@ -786,6 +790,7 @@ function renderSelectedDate() {
       ${dayNote ? `<article class="day-note-card"><h3>Your Note</h3><div class="event-notes">${escapeHtml(dayNote)}</div></article>` : ""}
       <div class="empty-state">No trades on this day yet.</div>
     `;
+    renderTradeStory();
     renderTradeReplay();
     return;
   }
@@ -821,6 +826,7 @@ function renderSelectedDate() {
       deleteActivity(button.dataset.id);
     });
   });
+  renderTradeStory();
   renderTradeReplay();
 }
 
@@ -2271,6 +2277,8 @@ function renderPerformanceCharts() {
   renderTradeHistoryTable();
   renderRiskMetrics();
   renderInsights();
+  renderStrategyLab();
+  renderRedFlags();
   renderSymbolPerformanceTable();
 }
 
@@ -2491,6 +2499,154 @@ function renderInsights() {
       <strong>${escapeHtml(value)}</strong>
     </article>
   `).join("");
+}
+
+function renderStrategyLab() {
+  if (!strategyLabTable) {
+    return;
+  }
+
+  const strategyMap = new Map();
+  getFilteredEvents().forEach((entry) => {
+    const strategy = inferStrategy(entry);
+    const bucket = strategyMap.get(strategy) || { strategy, trades: [], realized: 0, sells: 0, wins: 0 };
+    bucket.trades.push(entry);
+    bucket.realized += getRealizedPnl(entry);
+    if (entry.side === "sell") {
+      bucket.sells += 1;
+      if (getRealizedPnl(entry) > 0) {
+        bucket.wins += 1;
+      }
+    }
+    strategyMap.set(strategy, bucket);
+  });
+
+  const rows = [...strategyMap.values()]
+    .map((entry) => ({
+      strategy: entry.strategy,
+      trades: entry.trades.length,
+      realized: entry.realized,
+      winRate: entry.sells > 0 ? (entry.wins / entry.sells) * 100 : 0,
+      avgRealized: entry.trades.length > 0 ? entry.realized / entry.trades.length : 0,
+    }))
+    .sort((left, right) => Math.abs(right.realized) - Math.abs(left.realized))
+    .slice(0, 8);
+
+  if (rows.length === 0) {
+    strategyLabTable.innerHTML = `<div class="empty-state">Sync trades to compare strategies.</div>`;
+    return;
+  }
+
+  strategyLabTable.innerHTML = `
+    <div class="table-head">
+      <span>Strategy</span>
+      <span>Realized (PHP)</span>
+      <span>Trades</span>
+      <span>Win Rate</span>
+    </div>
+    ${rows.map((row) => `
+      <div class="table-row">
+        <span><strong>${escapeHtml(row.strategy)}</strong><br /><span class="muted">Avg ${escapeHtml(formatSignedMoney(row.avgRealized))}</span></span>
+        <span class="${row.realized > 0 ? "positive-text" : row.realized < 0 ? "negative-text" : ""}">${escapeHtml(formatSignedMoney(row.realized))}</span>
+        <span>${row.trades}</span>
+        <span>${row.winRate.toFixed(1)}%</span>
+      </div>
+    `).join("")}
+  `;
+}
+
+function renderRedFlags() {
+  if (!redFlagGrid) {
+    return;
+  }
+
+  const events = getFilteredEvents();
+  const sells = events.filter((entry) => entry.side === "sell");
+  const losses = sells.filter((entry) => getRealizedPnl(entry) < 0);
+  const worstLoss = losses.length > 0 ? losses.reduce((worst, entry) => getRealizedPnl(entry) < getRealizedPnl(worst) ? entry : worst) : null;
+  const dayCounts = new Map();
+  events.forEach((entry) => dayCounts.set(entry.date, (dayCounts.get(entry.date) || 0) + 1));
+  const overtradeDay = [...dayCounts.entries()].sort((left, right) => right[1] - left[1])[0];
+  const habits = summarizeHabitTags();
+  const flaggedHabit = habits.find(([tag]) => ["fomo", "moved-stop", "overtraded", "revenge-trade"].includes(tag));
+  const lossStreak = calculateWinLossStreaks(sells).bestLoss;
+
+  redFlagGrid.innerHTML = [
+    ["Largest Loss", worstLoss ? `${worstLoss.asset} ${formatSignedMoney(getRealizedPnl(worstLoss))}` : "No losing trade yet"],
+    ["Most Active Day", overtradeDay ? `${formatShortDate(overtradeDay[0])} (${overtradeDay[1]} trades)` : "No trade days yet"],
+    ["Top Red Flag", flaggedHabit ? `${formatHabitLabel(flaggedHabit[0])} (${flaggedHabit[1]})` : "No habit warnings yet"],
+    ["Loss Streak", `${lossStreak} losing sell${lossStreak === 1 ? "" : "s"} in a row`],
+  ].map(([label, value]) => `
+    <article class="analytics-item">
+      <span class="muted">${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </article>
+  `).join("");
+}
+
+function renderTradeStory() {
+  if (!tradeStoryPanel) {
+    return;
+  }
+
+  const events = getEventsForDate(state.selectedDate, true)
+    .slice()
+    .sort((left, right) => (left.executedAt || "").localeCompare(right.executedAt || ""));
+  const note = state.notesByDate[state.selectedDate] || "";
+
+  if (events.length === 0) {
+    tradeStoryPanel.className = "event-list empty-state";
+    tradeStoryPanel.textContent = note
+      ? `Story note: ${note}`
+      : "Pick a day with trades to build the story.";
+    return;
+  }
+
+  let runningPnl = 0;
+  tradeStoryPanel.className = "event-list";
+  tradeStoryPanel.innerHTML = events.map((entry, index) => {
+    runningPnl += getRealizedPnl(entry);
+    return `
+      <article class="event-item">
+        <div class="event-meta">
+          <span class="event-type">step ${index + 1}</span>
+          <span>${escapeHtml(formatDateTime(Date.parse(entry.executedAt || `${entry.date}T00:00:00Z`) || 0))}</span>
+        </div>
+        <h3>${escapeHtml(inferTradeStoryHeadline(entry))}</h3>
+        <div class="trade-stats">
+          <span>Strategy: ${escapeHtml(inferStrategy(entry))}</span>
+          <span>Value (PHP): ${formatMoney(entry.quoteAmount)}</span>
+          <span class="${getRealizedPnl(entry) >= 0 ? "positive-text" : "negative-text"}">Trade P/L: ${formatSignedMoney(getRealizedPnl(entry))}</span>
+          <span class="${runningPnl >= 0 ? "positive-text" : "negative-text"}">Day Running P/L: ${formatSignedMoney(runningPnl)}</span>
+        </div>
+        <div class="event-notes">${escapeHtml(entry.notes || "No exchange note.")}</div>
+      </article>
+    `;
+  }).join("") + (note ? `
+    <article class="day-note-card">
+      <h3>Lesson Or Journal Note</h3>
+      <div class="event-notes">${escapeHtml(note)}</div>
+    </article>
+  ` : "");
+}
+
+function inferStrategy(entry) {
+  const text = `${entry.notes || ""} ${entry.asset || ""}`.toLowerCase();
+  if (text.includes("grid")) return "Grid";
+  if (text.includes("breakout")) return "Breakout";
+  if (text.includes("retest")) return "Retest";
+  if (text.includes("scalp")) return "Scalp";
+  if (text.includes("swing")) return "Swing";
+  if (text.includes("momentum")) return "Momentum";
+  if (text.includes("trend")) return "Trend";
+  if (text.includes("bot")) return "Bot";
+  return "General";
+}
+
+function inferTradeStoryHeadline(entry) {
+  const side = String(entry.side || "trade").toUpperCase();
+  const strategy = inferStrategy(entry);
+  return `${side} ${entry.asset} using ${strategy}`;
 }
 
 function renderSymbolPerformanceTable() {
@@ -3689,6 +3845,7 @@ function deleteActivity(id) {
   renderStats();
   renderCalendar();
   renderSelectedDate();
+  renderTradeStory();
   hydrateDayNoteForm();
   renderSymbolAnalytics();
   renderPerformanceCharts();
