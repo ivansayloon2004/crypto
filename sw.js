@@ -1,4 +1,4 @@
-const CACHE_NAME = "crypto-calendar-v1";
+const CACHE_NAME = "crypto-calendar-v2";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -41,6 +41,36 @@ self.addEventListener("fetch", (event) => {
       status: 503,
       headers: { "Content-Type": "application/json" },
     })));
+    return;
+  }
+
+  const isAppShellRequest =
+    request.mode === "navigate" ||
+    url.pathname === "/" ||
+    url.pathname.endsWith("/index.html") ||
+    url.pathname.endsWith("/app.js") ||
+    url.pathname.endsWith("/styles.css") ||
+    url.pathname.endsWith("/manifest.webmanifest");
+
+  if (isAppShellRequest) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => {});
+          return response;
+        })
+        .catch(async () => {
+          const cached = await caches.match(request);
+          if (cached) {
+            return cached;
+          }
+          if (request.mode === "navigate") {
+            return (await caches.match("/offline.html")) || Response.error();
+          }
+          return Response.error();
+        })
+    );
     return;
   }
 

@@ -37,6 +37,17 @@
   </div>
 
   <div id="appShell" class="app-shell is-hidden">
+    <section class="mobile-trade-bar">
+      <div>
+        <p id="mobileTradeSymbol" class="mobile-trade-symbol">BTCUSDT</p>
+        <p id="mobileTradeMeta" class="mobile-trade-meta">Spot market</p>
+      </div>
+      <div class="mobile-trade-price-wrap">
+        <strong id="mobileTradePrice" class="mobile-trade-price">--</strong>
+        <span id="mobileTradeChange" class="mobile-trade-change muted">0.00%</span>
+      </div>
+    </section>
+
     <header class="hero">
       <div>
         <p class="eyebrow">Crypto Dashboard</p>
@@ -104,9 +115,12 @@
                 <p class="section-label">Monthly View</p>
                 <h2 id="monthLabel">Month</h2>
               </div>
-              <div class="calendar-nav">
+              <div class="calendar-tools">
+                <button id="calendarModeButton" class="button button-ghost" type="button">Heatmap Off</button>
+                <div class="calendar-nav">
                 <button id="prevMonthButton" class="icon-button" aria-label="Previous month">&#8592;</button>
                 <button id="nextMonthButton" class="icon-button" aria-label="Next month">&#8594;</button>
+                </div>
               </div>
             </div>
             <div class="weekday-row" id="weekdayRow"></div>
@@ -573,7 +587,32 @@
     </section>
   </div>
 
+  <div id="symbolDrawer" class="symbol-drawer is-hidden">
+    <div id="symbolDrawerBackdrop" class="symbol-drawer-backdrop"></div>
+    <section class="symbol-drawer-panel">
+      <div class="section-head">
+        <div>
+          <p class="section-label">Symbol Detail</p>
+          <h2 id="symbolDrawerTitle">BTCUSDT</h2>
+        </div>
+        <button id="closeSymbolDrawerButton" class="button button-ghost" type="button">Close</button>
+      </div>
+      <div id="symbolDrawerStats" class="analytics-grid"></div>
+      <div class="stack-row">
+        <button id="symbolDrawerOpenChartButton" class="button button-secondary" type="button">Open Chart</button>
+        <button id="symbolDrawerAddAlertButton" class="button button-ghost" type="button">Add Alert</button>
+        <button id="symbolDrawerSaveWatchlistButton" class="button button-ghost" type="button">Save To Watchlist</button>
+      </div>
+      <div id="symbolDrawerJournal" class="ai-result empty-state">No journal note for this symbol yet.</div>
+    </section>
+  </div>
+
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script>
+    window.setTimeout(() => {
+      document.getElementById("appSplash")?.classList.add("is-hidden");
+    }, 2500);
+  </script>
   <script src="./app.js"></script>
 </body>
 </html>
