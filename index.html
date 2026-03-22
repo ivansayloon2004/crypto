@@ -94,6 +94,48 @@
           <div class="weekday-row" id="weekdayRow"></div>
           <div id="calendarGrid" class="calendar-grid"></div>
         </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="section-label">MEXC Charts</p>
+              <h2>Live Market Chart</h2>
+            </div>
+          </div>
+          <div class="split-fields">
+            <label>
+              Symbol
+              <input id="marketSymbolInput" type="text" value="BTCUSDT" placeholder="BTCUSDT" />
+            </label>
+            <label>
+              Interval
+              <select id="marketIntervalSelect">
+                <option value="1m">1m</option>
+                <option value="5m">5m</option>
+                <option value="15m">15m</option>
+                <option value="30m">30m</option>
+                <option value="60m">1h</option>
+                <option value="4h" selected>4h</option>
+                <option value="1d">1d</option>
+                <option value="1W">1W</option>
+              </select>
+            </label>
+          </div>
+          <div class="stack-row">
+            <button id="loadChartButton" class="button button-secondary" type="button">Load Chart</button>
+            <button id="useMexcSymbolsButton" class="button button-ghost" type="button">Use My Sync Symbols</button>
+          </div>
+          <p id="marketChartStatus" class="muted">
+            Load a symbol to view MEXC candlesticks directly in the app.
+          </p>
+          <div class="chart-board">
+            <div class="chart-board-head">
+              <span id="marketChartTitle">BTCUSDT 4h</span>
+              <span id="marketChartPrice" class="pill">Last: --</span>
+            </div>
+            <canvas id="marketChartCanvas" class="market-chart-canvas" width="980" height="360"></canvas>
+          </div>
+        </section>
       </section>
 
       <aside class="sidebar">

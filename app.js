@@ -31,6 +31,14 @@ const syncStatus = document.getElementById("syncStatus");
 const dayNoteForm = document.getElementById("dayNoteForm");
 const jsonInput = document.getElementById("jsonInput");
 const mexcForm = document.getElementById("mexcForm");
+const marketSymbolInput = document.getElementById("marketSymbolInput");
+const marketIntervalSelect = document.getElementById("marketIntervalSelect");
+const loadChartButton = document.getElementById("loadChartButton");
+const useMexcSymbolsButton = document.getElementById("useMexcSymbolsButton");
+const marketChartStatus = document.getElementById("marketChartStatus");
+const marketChartTitle = document.getElementById("marketChartTitle");
+const marketChartPrice = document.getElementById("marketChartPrice");
+const marketChartCanvas = document.getElementById("marketChartCanvas");
 const aiChartForm = document.getElementById("aiChartForm");
 const chartImageInput = document.getElementById("chartImageInput");
 const chartContextInput = document.getElementById("chartContextInput");
@@ -139,6 +147,12 @@ document.getElementById("clearNoteButton").addEventListener("click", clearSelect
 document.getElementById("syncButton").addEventListener("click", syncMexc);
 document.getElementById("clearKeysButton").addEventListener("click", clearMexcKeys);
 document.getElementById("logoutButton").addEventListener("click", logout);
+if (loadChartButton) {
+  loadChartButton.addEventListener("click", loadMarketChart);
+}
+if (useMexcSymbolsButton) {
+  useMexcSymbolsButton.addEventListener("click", useMexcSymbolsForChart);
+}
 chartImageInput.addEventListener("change", handleChartPreview);
 fieldToggles.forEach((button) => {
   button.addEventListener("click", () => toggleSecretField(button));
@@ -185,6 +199,7 @@ function initializeDashboard() {
   renderCalendar();
   renderSelectedDate();
   hydrateDayNoteForm();
+  loadMarketChart();
 }
 
 function renderStats() {
@@ -704,6 +719,149 @@ function fileToDataUrl(file) {
     reader.onerror = () => reject(new Error("Could not read the image file"));
     reader.readAsDataURL(file);
   });
+}
+
+async function loadMarketChart() {
+  if (!marketSymbolInput || !marketIntervalSelect || !marketChartCanvas) {
+    return;
+  }
+
+  const symbol = String(marketSymbolInput.value || "").trim().toUpperCase() || "BTCUSDT";
+  const interval = String(marketIntervalSelect.value || "4h").trim();
+  if (marketChartStatus) {
+    marketChartStatus.textContent = `Loading ${symbol} ${interval} chart from MEXC...`;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/mexc/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=80`, {
+      credentials: "same-origin",
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not load chart");
+    }
+
+    drawMarketChart(payload.klines || [], symbol, interval);
+    if (marketChartStatus) {
+      marketChartStatus.textContent = `Loaded ${symbol} ${interval} chart from MEXC.`;
+    }
+  } catch (error) {
+    if (marketChartStatus) {
+      marketChartStatus.textContent = `Chart unavailable: ${error.message}`;
+    }
+    clearMarketChart();
+  }
+}
+
+function useMexcSymbolsForChart() {
+  if (!marketSymbolInput) {
+    return;
+  }
+
+  const symbols = String(mexcForm?.elements?.symbols?.value || "").split(",").map((value) => value.trim()).filter(Boolean);
+  if (symbols.length === 0) {
+    if (marketChartStatus) {
+      marketChartStatus.textContent = "Add spot symbols in the MEXC sync section first, or type a symbol manually.";
+    }
+    return;
+  }
+
+  marketSymbolInput.value = symbols[0].toUpperCase();
+  loadMarketChart();
+}
+
+function clearMarketChart() {
+  if (!marketChartCanvas) {
+    return;
+  }
+
+  const context = marketChartCanvas.getContext("2d");
+  context.clearRect(0, 0, marketChartCanvas.width, marketChartCanvas.height);
+  if (marketChartTitle) {
+    marketChartTitle.textContent = "Chart unavailable";
+  }
+  if (marketChartPrice) {
+    marketChartPrice.textContent = "Last: --";
+  }
+}
+
+function drawMarketChart(klines, symbol, interval) {
+  if (!marketChartCanvas) {
+    return;
+  }
+
+  if (!Array.isArray(klines) || klines.length === 0) {
+    clearMarketChart();
+    throw new Error("No candles returned");
+  }
+
+  const canvas = marketChartCanvas;
+  const context = canvas.getContext("2d");
+  const width = canvas.width;
+  const height = canvas.height;
+  const padding = { top: 20, right: 70, bottom: 28, left: 14 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const normalized = klines.map((entry) => ({
+    time: Number(entry[0]),
+    open: Number(entry[1]),
+    high: Number(entry[2]),
+    low: Number(entry[3]),
+    close: Number(entry[4]),
+  }));
+  const lows = normalized.map((entry) => entry.low);
+  const highs = normalized.map((entry) => entry.high);
+  const minPrice = Math.min(...lows);
+  const maxPrice = Math.max(...highs);
+  const priceRange = Math.max(maxPrice - minPrice, maxPrice * 0.002);
+  const candleWidth = Math.max(4, chartWidth / normalized.length * 0.62);
+  const gap = chartWidth / normalized.length;
+
+  context.clearRect(0, 0, width, height);
+
+  for (let row = 0; row < 5; row += 1) {
+    const y = padding.top + (chartHeight / 4) * row;
+    context.strokeStyle = "rgba(255,255,255,0.08)";
+    context.beginPath();
+    context.moveTo(padding.left, y);
+    context.lineTo(width - padding.right, y);
+    context.stroke();
+
+    const price = maxPrice - (priceRange / 4) * row;
+    context.fillStyle = "rgba(158,178,202,0.9)";
+    context.font = "12px IBM Plex Mono, monospace";
+    context.textAlign = "left";
+    context.fillText(formatMoney(price), width - padding.right + 8, y + 4);
+  }
+
+  normalized.forEach((entry, index) => {
+    const x = padding.left + gap * index + gap / 2;
+    const openY = padding.top + ((maxPrice - entry.open) / priceRange) * chartHeight;
+    const closeY = padding.top + ((maxPrice - entry.close) / priceRange) * chartHeight;
+    const highY = padding.top + ((maxPrice - entry.high) / priceRange) * chartHeight;
+    const lowY = padding.top + ((maxPrice - entry.low) / priceRange) * chartHeight;
+    const rising = entry.close >= entry.open;
+
+    context.strokeStyle = rising ? "#44d7b6" : "#ff8a80";
+    context.lineWidth = 1.5;
+    context.beginPath();
+    context.moveTo(x, highY);
+    context.lineTo(x, lowY);
+    context.stroke();
+
+    const bodyTop = Math.min(openY, closeY);
+    const bodyHeight = Math.max(2, Math.abs(closeY - openY));
+    context.fillStyle = rising ? "rgba(68,215,182,0.9)" : "rgba(255,138,128,0.9)";
+    context.fillRect(x - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
+  });
+
+  const last = normalized[normalized.length - 1];
+  if (marketChartTitle) {
+    marketChartTitle.textContent = `${symbol} ${interval}`;
+  }
+  if (marketChartPrice) {
+    marketChartPrice.textContent = `Last: ${formatMoney(last.close)}`;
+  }
 }
 
 function setDefaultSyncRange() {

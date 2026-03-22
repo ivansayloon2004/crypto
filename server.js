@@ -48,6 +48,10 @@ const server = http.createServer(async (req, res) => {
     return withAuthenticatedUser(req, res, () => handleMexcActivity(req, res));
   }
 
+  if (req.method === "GET" && requestUrl.pathname === "/api/mexc/klines") {
+    return withAuthenticatedUser(req, res, () => handleMexcKlines(requestUrl, res));
+  }
+
   if (req.method === "POST" && requestUrl.pathname === "/api/ai/chart-analysis") {
     return withAuthenticatedUser(req, res, () => handleChartAnalysis(req, res));
   }
@@ -195,6 +199,22 @@ async function handleChartAnalysis(req, res) {
 
     const analysis = extractResponseText(payload);
     return sendJson(res, 200, { analysis });
+  } catch (error) {
+    return sendJson(res, 500, { error: error.message });
+  }
+}
+
+async function handleMexcKlines(requestUrl, res) {
+  const symbol = String(requestUrl.searchParams.get("symbol") || "BTCUSDT").trim().toUpperCase();
+  const interval = String(requestUrl.searchParams.get("interval") || "4h").trim();
+  const limit = Math.min(200, Math.max(20, Number(requestUrl.searchParams.get("limit") || 80)));
+
+  try {
+    const payload = await publicGet({
+      endpoint: `/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`,
+      apiBase: "https://api.mexc.com",
+    });
+    return sendJson(res, 200, { symbol, interval, klines: payload });
   } catch (error) {
     return sendJson(res, 500, { error: error.message });
   }
