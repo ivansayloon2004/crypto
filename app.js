@@ -33,6 +33,8 @@ const state = {
     key: "executedAt",
     direction: "desc",
   },
+  currentWindow: "overview",
+  currentSidebarPane: "day",
 };
 
 const monthLabel = document.getElementById("monthLabel");
@@ -40,6 +42,7 @@ const overviewWindowTab = document.getElementById("overviewWindowTab");
 const marketsWindowTab = document.getElementById("marketsWindowTab");
 const overviewWindow = document.getElementById("overviewWindow");
 const marketsWindow = document.getElementById("marketsWindow");
+const sidebar = document.getElementById("sidebar");
 const sidebarTabDay = document.getElementById("sidebarTabDay");
 const sidebarTabNotes = document.getElementById("sidebarTabNotes");
 const sidebarTabMexc = document.getElementById("sidebarTabMexc");
@@ -50,6 +53,11 @@ const sidebarPaneNotes = document.getElementById("sidebarPaneNotes");
 const sidebarPaneMexc = document.getElementById("sidebarPaneMexc");
 const sidebarPaneAi = document.getElementById("sidebarPaneAi");
 const sidebarPaneImport = document.getElementById("sidebarPaneImport");
+const mobileDockOverview = document.getElementById("mobileDockOverview");
+const mobileDockMarkets = document.getElementById("mobileDockMarkets");
+const mobileDockDay = document.getElementById("mobileDockDay");
+const mobileDockMexc = document.getElementById("mobileDockMexc");
+const mobileDockAi = document.getElementById("mobileDockAi");
 const calendarGrid = document.getElementById("calendarGrid");
 const weekdayRow = document.getElementById("weekdayRow");
 const selectedDateLabel = document.getElementById("selectedDateLabel");
@@ -155,6 +163,21 @@ sidebarTabNotes?.addEventListener("click", () => switchSidebarPane("notes"));
 sidebarTabMexc?.addEventListener("click", () => switchSidebarPane("mexc"));
 sidebarTabAi?.addEventListener("click", () => switchSidebarPane("ai"));
 sidebarTabImport?.addEventListener("click", () => switchSidebarPane("import"));
+mobileDockOverview?.addEventListener("click", () => switchMainWindow("overview"));
+mobileDockMarkets?.addEventListener("click", () => switchMainWindow("markets"));
+mobileDockDay?.addEventListener("click", () => {
+  switchMainWindow("overview");
+  switchSidebarPane("day");
+  scrollSidebarIntoView();
+});
+mobileDockMexc?.addEventListener("click", () => {
+  switchSidebarPane("mexc");
+  scrollSidebarIntoView();
+});
+mobileDockAi?.addEventListener("click", () => {
+  switchSidebarPane("ai");
+  scrollSidebarIntoView();
+});
 
 document.getElementById("prevMonthButton").addEventListener("click", () => {
   state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() - 1, 1);
@@ -334,14 +357,17 @@ function initializeDashboard() {
 }
 
 function switchMainWindow(view) {
+  state.currentWindow = view;
   const isOverview = view === "overview";
   overviewWindow?.classList.toggle("is-active", isOverview);
   marketsWindow?.classList.toggle("is-active", !isOverview);
   overviewWindowTab.className = isOverview ? "button button-primary" : "button button-ghost";
   marketsWindowTab.className = isOverview ? "button button-ghost" : "button button-primary";
+  updateMobileDockState();
 }
 
 function switchSidebarPane(view) {
+  state.currentSidebarPane = view;
   const paneMap = {
     day: [sidebarTabDay, sidebarPaneDay],
     notes: [sidebarTabNotes, sidebarPaneNotes],
@@ -357,6 +383,19 @@ function switchSidebarPane(view) {
     tab?.classList.toggle("button-ghost", !active);
     pane?.classList.toggle("is-active", active);
   });
+  updateMobileDockState();
+}
+
+function updateMobileDockState() {
+  mobileDockOverview?.classList.toggle("is-active", state.currentWindow === "overview");
+  mobileDockMarkets?.classList.toggle("is-active", state.currentWindow === "markets");
+  mobileDockDay?.classList.toggle("is-active", state.currentSidebarPane === "day");
+  mobileDockMexc?.classList.toggle("is-active", state.currentSidebarPane === "mexc");
+  mobileDockAi?.classList.toggle("is-active", state.currentSidebarPane === "ai");
+}
+
+function scrollSidebarIntoView() {
+  sidebar?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function openChartModal() {

@@ -333,7 +333,7 @@
         </section>
       </section>
 
-      <aside class="sidebar">
+      <aside id="sidebar" class="sidebar">
         <div class="window-tabs sidebar-tabs">
           <button id="sidebarTabDay" class="button button-primary" type="button">Day</button>
           <button id="sidebarTabNotes" class="button button-ghost" type="button">Notes</button>
@@ -499,6 +499,14 @@
       </aside>
     </main>
   </div>
+
+  <nav class="mobile-dock" aria-label="Mobile navigation">
+    <button id="mobileDockOverview" class="mobile-dock-button is-active" type="button">Overview</button>
+    <button id="mobileDockMarkets" class="mobile-dock-button" type="button">Markets</button>
+    <button id="mobileDockDay" class="mobile-dock-button" type="button">Day</button>
+    <button id="mobileDockMexc" class="mobile-dock-button" type="button">MEXC</button>
+    <button id="mobileDockAi" class="mobile-dock-button" type="button">AI</button>
+  </nav>
 
   <div id="chartModal" class="chart-modal is-hidden">
     <div class="chart-modal-backdrop" id="chartModalBackdrop"></div>

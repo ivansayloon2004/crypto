@@ -27,6 +27,7 @@ body {
   min-height: 100vh;
   font-family: "Space Grotesk", sans-serif;
   color: var(--text);
+  overflow-x: hidden;
   background:
     radial-gradient(circle at top left, rgba(125, 196, 255, 0.14), transparent 24%),
     radial-gradient(circle at top right, rgba(247, 185, 85, 0.12), transparent 26%),
@@ -168,6 +169,10 @@ h1 {
   flex-wrap: wrap;
 }
 
+.window-tabs::-webkit-scrollbar {
+  display: none;
+}
+
 .window-pane {
   display: none;
   gap: 22px;
@@ -220,6 +225,10 @@ h1 {
     linear-gradient(180deg, rgba(13, 24, 40, 0.96), rgba(10, 19, 32, 0.92));
   backdrop-filter: blur(16px);
   box-shadow: var(--shadow);
+}
+
+.mobile-dock {
+  display: none;
 }
 
 .card-calendar {
@@ -1052,6 +1061,7 @@ code {
   .app-shell {
     width: min(100vw - 20px, 100%);
     padding-top: 18px;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   }
 
   .hero {
@@ -1060,8 +1070,37 @@ code {
     flex-direction: column;
   }
 
+  .hero-actions,
+  .hero-actions .button,
+  .hero-actions .user-badge {
+    width: 100%;
+  }
+
+  .user-badge {
+    justify-content: space-between;
+  }
+
+  .window-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scroll-snap-type: x proximity;
+  }
+
+  .window-tabs .button {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+  }
+
+  .card {
+    padding: 18px;
+  }
+
   .market-tabs {
     justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
   }
 
   .weekday-row,
@@ -1070,7 +1109,7 @@ code {
   }
 
   .calendar-day {
-    min-height: 92px;
+    min-height: 84px;
     padding: 10px;
   }
 
@@ -1087,6 +1126,30 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .performance-canvas,
+  .market-chart-canvas {
+    height: 280px;
+  }
+
+  .chart-modal-panel {
+    width: min(100vw - 12px, 100%);
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .chart-modal-canvas {
+    height: calc(100vh - 160px);
+  }
+
+  .table-shell {
+    overflow-x: auto;
+  }
+
+  .table-head,
+  .table-row {
+    min-width: 520px;
+  }
+
   .chart-board-head,
   .chart-board-meta {
     align-items: flex-start;
@@ -1096,5 +1159,47 @@ code {
   .market-list-head,
   .market-row {
     grid-template-columns: minmax(0, 1.6fr) minmax(76px, 0.9fr) minmax(64px, 0.7fr) minmax(64px, 0.7fr);
+  }
+
+  .market-list {
+    max-height: 280px;
+  }
+
+  .sidebar-tabs {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(88px, 1fr));
+  }
+
+  .mobile-dock {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    z-index: 50;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: 20px;
+    background: rgba(7, 14, 24, 0.94);
+    backdrop-filter: blur(18px);
+    box-shadow: var(--shadow);
+  }
+
+  .mobile-dock-button {
+    min-height: 48px;
+    padding: 8px 6px;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .mobile-dock-button.is-active {
+    color: #0a111f;
+    background: linear-gradient(135deg, var(--gold), #ffd899);
   }
 }
