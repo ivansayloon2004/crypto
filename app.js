@@ -1,4 +1,5 @@
 const STORAGE_KEY = "crypto-calendar-events-v1";
+const NOTES_STORAGE_KEY = "crypto-calendar-notes-v1";
 const MEXC_STORAGE_KEY = "crypto-calendar-mexc-config-v2";
 const MEXC_SESSION_KEY = "crypto-calendar-mexc-session-v2";
 const API_BASE_URL = window.location.origin;
@@ -15,6 +16,7 @@ const state = {
   currentMonth: new Date(),
   selectedDate: formatDateKey(new Date()),
   events: loadEvents().filter((entry) => entry.type === "trade"),
+  notesByDate: loadNotes(),
 };
 
 const monthLabel = document.getElementById("monthLabel");
@@ -24,7 +26,7 @@ const selectedDateLabel = document.getElementById("selectedDateLabel");
 const selectedDateEvents = document.getElementById("selectedDateEvents");
 const selectedDateTotal = document.getElementById("selectedDateTotal");
 const syncStatus = document.getElementById("syncStatus");
-const activityForm = document.getElementById("activityForm");
+const dayNoteForm = document.getElementById("dayNoteForm");
 const jsonInput = document.getElementById("jsonInput");
 const mexcForm = document.getElementById("mexcForm");
 const fieldToggles = document.querySelectorAll(".field-toggle");
@@ -50,9 +52,9 @@ document.getElementById("nextMonthButton").addEventListener("click", () => {
 document.getElementById("todayButton").addEventListener("click", () => {
   state.currentMonth = new Date();
   state.selectedDate = formatDateKey(new Date());
-  activityForm.elements.date.value = state.selectedDate;
   renderCalendar();
   renderSelectedDate();
+  hydrateDayNoteForm();
 });
 
 document.getElementById("resetButton").addEventListener("click", () => {
@@ -82,27 +84,27 @@ document.getElementById("importButton").addEventListener("click", () => {
   }
 });
 
-activityForm.addEventListener("submit", (event) => {
+dayNoteForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  const formData = new FormData(dayNoteForm);
+  const date = String(formData.get("date") || "").trim();
+  const note = String(formData.get("notes") || "").trim();
+  if (!date) {
+    return;
+  }
 
-  const formData = new FormData(activityForm);
-  const newEvent = normalizeEvent({
-    date: formData.get("date"),
-    type: formData.get("type"),
-    asset: formData.get("asset"),
-    amount: formData.get("amount"),
-    notes: formData.get("notes"),
-  });
+  if (note) {
+    state.notesByDate[date] = note;
+  } else {
+    delete state.notesByDate[date];
+  }
 
-  state.events = [...state.events, newEvent];
-  state.selectedDate = newEvent.date;
-  persistEvents();
+  persistNotes();
   renderCalendar();
   renderSelectedDate();
-  activityForm.reset();
-  activityForm.elements.date.value = state.selectedDate;
-  syncStatus.textContent = `${newEvent.type} added for ${newEvent.asset}.`;
+  syncStatus.textContent = note ? "Day note saved." : "Day note cleared.";
 });
+document.getElementById("clearNoteButton").addEventListener("click", clearSelectedDayNote);
 
 document.getElementById("syncButton").addEventListener("click", syncMexc);
 document.getElementById("clearKeysButton").addEventListener("click", clearMexcKeys);
@@ -147,7 +149,7 @@ function initializeDashboard() {
   renderWeekdays();
   renderCalendar();
   renderSelectedDate();
-  activityForm.elements.date.value = state.selectedDate;
+  hydrateDayNoteForm();
 }
 
 function renderCalendar() {
@@ -183,6 +185,7 @@ function renderCalendar() {
             <span class="pnl-chip ${daySummary.pnlClass}">${daySummary.label}</span>
             <span class="event-chip ${daySummary.pnlClass}">${daySummary.value}</span>
           `}
+          ${state.notesByDate[dateKey] ? `<span class="note-chip">Note</span>` : ""}
         </div>
       </button>
     `);
@@ -193,9 +196,9 @@ function renderCalendar() {
   calendarGrid.querySelectorAll(".calendar-day").forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedDate = button.dataset.date;
-      activityForm.elements.date.value = state.selectedDate;
       renderCalendar();
       renderSelectedDate();
+      hydrateDayNoteForm();
     });
   });
 }
@@ -203,6 +206,7 @@ function renderCalendar() {
 function renderSelectedDate() {
   const events = getEventsForDate(state.selectedDate);
   const summary = summarizeTrades(events);
+  const dayNote = state.notesByDate[state.selectedDate] || "";
   const parsedDate = new Date(`${state.selectedDate}T00:00:00`);
   const readableDate = new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -215,33 +219,39 @@ function renderSelectedDate() {
   selectedDateTotal.textContent = events.length === 0 ? "No trades" : `${summary.label} ${summary.value}`;
 
   if (events.length === 0) {
-    selectedDateEvents.className = "event-list empty-state";
-    selectedDateEvents.textContent = "No trades on this day yet.";
+    selectedDateEvents.className = "event-list";
+    selectedDateEvents.innerHTML = `
+      ${dayNote ? `<article class="day-note-card"><h3>Your Note</h3><div class="event-notes">${escapeHtml(dayNote)}</div></article>` : ""}
+      <div class="empty-state">No trades on this day yet.</div>
+    `;
     return;
   }
 
   selectedDateEvents.className = "event-list";
-  selectedDateEvents.innerHTML = events
-    .sort((left, right) => (left.executedAt || "").localeCompare(right.executedAt || ""))
-    .map((entry) => `
-      <article class="event-item ${entry.type}">
-        <div class="event-header-row">
-          <div class="event-meta">
-            <span class="event-type">${entry.side ? escapeHtml(entry.side) : "trade"}</span>
-            <span>${escapeHtml(entry.asset)}</span>
+  selectedDateEvents.innerHTML = `
+    ${dayNote ? `<article class="day-note-card"><h3>Your Note</h3><div class="event-notes">${escapeHtml(dayNote)}</div></article>` : ""}
+    ${events
+      .sort((left, right) => (left.executedAt || "").localeCompare(right.executedAt || ""))
+      .map((entry) => `
+        <article class="event-item ${entry.type}">
+          <div class="event-header-row">
+            <div class="event-meta">
+              <span class="event-type">${entry.side ? escapeHtml(entry.side) : "trade"}</span>
+              <span>${escapeHtml(entry.asset)}</span>
+            </div>
+            <button class="delete-button" data-id="${escapeHtml(entry.id)}" type="button">Delete</button>
           </div>
-          <button class="delete-button" data-id="${escapeHtml(entry.id)}" type="button">Delete</button>
-        </div>
-        <h3>${formatAmount(entry.amount)} ${escapeHtml(entry.asset)}</h3>
-        <div class="trade-stats">
-          <span>Price: ${formatMoney(entry.price)}</span>
-          <span>Value: ${formatMoney(entry.quoteAmount)}</span>
-          <span class="${getTradeCashFlow(entry) >= 0 ? "positive-text" : "negative-text"}">P/L Est.: ${formatSignedMoney(getTradeCashFlow(entry))}</span>
-        </div>
-        <div class="event-notes">${entry.notes ? escapeHtml(entry.notes) : "No notes added."}</div>
-      </article>
-    `)
-    .join("");
+          <h3>${formatAmount(entry.amount)} ${escapeHtml(entry.asset)}</h3>
+          <div class="trade-stats">
+            <span>Price: ${formatMoney(entry.price)}</span>
+            <span>Value: ${formatMoney(entry.quoteAmount)}</span>
+            <span class="${getTradeCashFlow(entry) >= 0 ? "positive-text" : "negative-text"}">P/L Est.: ${formatSignedMoney(getTradeCashFlow(entry))}</span>
+          </div>
+          <div class="event-notes">${entry.notes ? escapeHtml(entry.notes) : "No exchange note."}</div>
+        </article>
+      `)
+      .join("")}
+  `;
 
   selectedDateEvents.querySelectorAll(".delete-button").forEach((button) => {
     button.addEventListener("click", () => {
@@ -457,6 +467,11 @@ function hydrateMexcForm() {
   mexcForm.elements.rememberKeys.checked = config.rememberKeys;
 }
 
+function hydrateDayNoteForm() {
+  dayNoteForm.elements.date.value = state.selectedDate;
+  dayNoteForm.elements.notes.value = state.notesByDate[state.selectedDate] || "";
+}
+
 function clearMexcKeys() {
   localStorage.removeItem(MEXC_STORAGE_KEY);
   sessionStorage.removeItem(MEXC_SESSION_KEY);
@@ -465,6 +480,15 @@ function clearMexcKeys() {
   setDefaultSyncRange();
   resetSecretFieldStates();
   syncStatus.textContent = "Stored MEXC keys and sync settings cleared from this browser.";
+}
+
+function clearSelectedDayNote() {
+  delete state.notesByDate[state.selectedDate];
+  persistNotes();
+  hydrateDayNoteForm();
+  renderCalendar();
+  renderSelectedDate();
+  syncStatus.textContent = "Day note cleared.";
 }
 
 function readMexcForm() {
@@ -534,6 +558,19 @@ function persistEvents() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.events));
 }
 
+function loadNotes() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function persistNotes() {
+  localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(state.notesByDate));
+}
+
 function getEventsForDate(dateKey) {
   return state.events.filter((entry) => entry.date === dateKey);
 }
@@ -581,7 +618,7 @@ function deleteActivity(id) {
   persistEvents();
   renderCalendar();
   renderSelectedDate();
-  activityForm.elements.date.value = state.selectedDate;
+  hydrateDayNoteForm();
   syncStatus.textContent = "Trade deleted from your calendar.";
 }
 

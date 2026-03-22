@@ -78,37 +78,26 @@
         <section class="card">
           <div class="section-head">
             <div>
-              <p class="section-label">Quick Add</p>
-              <h2>Manual Trade</h2>
+              <p class="section-label">Day Notes</p>
+              <h2>Selected Day Note</h2>
             </div>
           </div>
           <p class="muted">
-            Add a trade for the selected date, or change the date field if you want a different day.
+            Trades and daily P/L sync automatically from MEXC. Use this section only for your own note for the selected day.
           </p>
-          <form id="activityForm" class="activity-form">
+          <form id="dayNoteForm" class="activity-form">
             <label>
               Date
-              <input type="date" name="date" required />
-            </label>
-            <label>
-              Type
-              <select name="type" required>
-                <option value="trade">Trade</option>
-              </select>
-            </label>
-            <label>
-              Asset
-              <input type="text" name="asset" placeholder="BTC" required />
-            </label>
-            <label>
-              Amount
-              <input type="number" name="amount" placeholder="0.25" step="0.00000001" required />
+              <input type="date" name="date" required readonly />
             </label>
             <label>
               Notes
-              <textarea name="notes" rows="3" placeholder="Spot buy on dip"></textarea>
+              <textarea name="notes" rows="4" placeholder="Breakout entry worked well. Need tighter stop next time."></textarea>
             </label>
-            <button type="submit" class="button button-primary">Save Activity</button>
+            <div class="stack-row">
+              <button type="submit" class="button button-primary">Save Note</button>
+              <button type="button" id="clearNoteButton" class="button button-ghost">Clear Note</button>
+            </div>
           </form>
         </section>
 

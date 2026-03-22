@@ -266,6 +266,17 @@ h1 {
   color: var(--muted);
 }
 
+.note-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--gold);
+  background: rgba(247, 185, 85, 0.12);
+}
+
 .event-chip,
 .event-item,
 .pill {
@@ -424,6 +435,19 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.03);
+}
+
+.day-note-card {
+  padding: 14px;
+  border: 1px solid rgba(247, 185, 85, 0.22);
+  border-radius: 18px;
+  background: rgba(247, 185, 85, 0.06);
+}
+
+.day-note-card h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  color: var(--gold);
 }
 
 .event-header-row {
