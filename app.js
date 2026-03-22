@@ -3,6 +3,7 @@ const NOTES_STORAGE_KEY = "crypto-calendar-notes-v1";
 const MEXC_STORAGE_KEY = "crypto-calendar-mexc-config-v2";
 const MEXC_SESSION_KEY = "crypto-calendar-mexc-session-v2";
 const API_BASE_URL = window.location.origin;
+const MEXC_MARKET_WS_URL = "wss://wbs-api.mexc.com/ws";
 const LEGACY_DEMO_NOTES = new Set([
   "Funding wallet top-up",
   "Spot buy during retrace",
@@ -75,6 +76,10 @@ let marketChartTimer = null;
 let marketChartLiveEnabled = true;
 let marketChartRefreshMs = 5000;
 let marketChartRequestId = 0;
+let marketChartSocket = null;
+let marketChartPingTimer = null;
+let marketChartReconnectTimer = null;
+let marketChartSeries = [];
 const DEFAULT_MARKET_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "BNBUSDT"];
 
 bootstrap();
@@ -761,13 +766,15 @@ async function loadMarketChart() {
       return;
     }
 
-    drawMarketChart(payload.klines || [], symbol, interval);
+    marketChartSeries = Array.isArray(payload.klines) ? payload.klines.slice(-80) : [];
+    drawMarketChart(marketChartSeries, symbol, interval);
     if (marketChartStatus) {
       marketChartStatus.textContent = marketChartLiveEnabled
-        ? `Live ${symbol} ${interval} chart is updating every ${Math.round(marketChartRefreshMs / 1000)}s.`
+        ? `Live ${symbol} ${interval} chart is streaming from MEXC.`
         : `Loaded ${symbol} ${interval} chart from MEXC.`;
     }
     syncMarketChartTimer();
+    syncMarketChartStream(symbol, interval);
   } catch (error) {
     if (requestId !== marketChartRequestId) {
       return;
@@ -849,6 +856,7 @@ function clearMarketChart() {
   if (marketChartPrice) {
     marketChartPrice.textContent = "Last: --";
   }
+  marketChartSeries = [];
 }
 
 function drawMarketChart(klines, symbol, interval) {
@@ -934,6 +942,7 @@ function toggleLiveChart() {
   marketChartLiveEnabled = !marketChartLiveEnabled;
   updateLiveChartUi();
   syncMarketChartTimer();
+  syncMarketChartStream();
 
   if (marketChartLiveEnabled) {
     loadMarketChart();
@@ -960,27 +969,190 @@ function updateLiveChartUi() {
 }
 
 function syncMarketChartTimer() {
-  if (!marketChartLiveEnabled || document.hidden) {
-    stopLiveMarketChart();
-    return;
-  }
-
   if (marketChartTimer) {
-    return;
+    window.clearInterval(marketChartTimer);
+    marketChartTimer = null;
   }
-
-  marketChartTimer = window.setInterval(() => {
-    loadMarketChart();
-  }, marketChartRefreshMs);
 }
 
 function stopLiveMarketChart() {
-  if (!marketChartTimer) {
+  if (marketChartTimer) {
+    window.clearInterval(marketChartTimer);
+    marketChartTimer = null;
+  }
+
+  stopMarketChartSocket();
+}
+
+function syncMarketChartStream(nextSymbol, nextInterval) {
+  if (!marketChartLiveEnabled || document.hidden) {
+    stopMarketChartSocket();
     return;
   }
 
-  window.clearInterval(marketChartTimer);
-  marketChartTimer = null;
+  const symbol = String(nextSymbol || marketSymbolInput?.value || "").trim().toUpperCase() || "BTCUSDT";
+  const interval = String(nextInterval || marketIntervalSelect?.value || "4h").trim();
+  const streamName = buildMarketKlineStream(symbol, interval);
+  if (!streamName) {
+    stopMarketChartSocket();
+    return;
+  }
+
+  const socketReadyForStream =
+    marketChartSocket &&
+    marketChartSocket.readyState === WebSocket.OPEN &&
+    marketChartSocket.datasetSymbol === symbol &&
+    marketChartSocket.datasetInterval === interval;
+
+  if (socketReadyForStream) {
+    return;
+  }
+
+  stopMarketChartSocket();
+
+  const socket = new WebSocket(MEXC_MARKET_WS_URL);
+  socket.datasetSymbol = symbol;
+  socket.datasetInterval = interval;
+  marketChartSocket = socket;
+
+  socket.addEventListener("open", () => {
+    if (marketChartSocket !== socket) {
+      socket.close();
+      return;
+    }
+
+    socket.send(JSON.stringify({
+      method: "SUBSCRIPTION",
+      params: [streamName],
+    }));
+
+    marketChartPingTimer = window.setInterval(() => {
+      if (marketChartSocket === socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ method: "PING" }));
+      }
+    }, 20000);
+
+    if (marketChartStatus) {
+      marketChartStatus.textContent = `Live ${symbol} ${interval} stream connected.`;
+    }
+  });
+
+  socket.addEventListener("message", (event) => {
+    if (marketChartSocket !== socket) {
+      return;
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+
+    if (payload.msg === "PONG" || payload.code === 0) {
+      return;
+    }
+
+    if (!payload.publicspotkline || String(payload.symbol || "").toUpperCase() !== symbol) {
+      return;
+    }
+
+    applyLiveKlineUpdate(payload.publicspotkline, symbol, interval);
+  });
+
+  socket.addEventListener("close", () => {
+    if (marketChartSocket === socket) {
+      marketChartSocket = null;
+      clearMarketChartSocketTimers();
+
+      if (marketChartLiveEnabled && !document.hidden) {
+        marketChartReconnectTimer = window.setTimeout(() => {
+          syncMarketChartStream(symbol, interval);
+        }, 2000);
+      }
+    }
+  });
+
+  socket.addEventListener("error", () => {
+    if (marketChartStatus) {
+      marketChartStatus.textContent = "Live stream connection had a problem. Reconnecting...";
+    }
+  });
+}
+
+function stopMarketChartSocket() {
+  clearMarketChartSocketTimers();
+
+  if (!marketChartSocket) {
+    return;
+  }
+
+  const socket = marketChartSocket;
+  marketChartSocket = null;
+  if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+    socket.close();
+  }
+}
+
+function clearMarketChartSocketTimers() {
+  if (marketChartPingTimer) {
+    window.clearInterval(marketChartPingTimer);
+    marketChartPingTimer = null;
+  }
+
+  if (marketChartReconnectTimer) {
+    window.clearTimeout(marketChartReconnectTimer);
+    marketChartReconnectTimer = null;
+  }
+}
+
+function buildMarketKlineStream(symbol, interval) {
+  const map = {
+    "1m": "Min1",
+    "5m": "Min5",
+    "15m": "Min15",
+    "30m": "Min30",
+    "60m": "Min60",
+    "4h": "Hour4",
+    "1d": "Day1",
+    "1W": "Week1",
+  };
+
+  const streamInterval = map[interval];
+  if (!streamInterval) {
+    return "";
+  }
+
+  return `spot@public.kline.v3.api.pb@${symbol}@${streamInterval}`;
+}
+
+function applyLiveKlineUpdate(kline, symbol, interval) {
+  const nextCandle = [
+    Number(kline.windowstart || 0) * 1000,
+    Number(kline.openingprice || 0),
+    Number(kline.highestprice || 0),
+    Number(kline.lowestprice || 0),
+    Number(kline.closingprice || 0),
+  ];
+
+  if (!nextCandle[0]) {
+    return;
+  }
+
+  const nextSeries = [...marketChartSeries];
+  const existingIndex = nextSeries.findIndex((entry) => Number(entry[0]) === nextCandle[0]);
+  if (existingIndex >= 0) {
+    nextSeries[existingIndex] = nextCandle;
+  } else {
+    nextSeries.push(nextCandle);
+  }
+
+  marketChartSeries = nextSeries.slice(-80);
+  drawMarketChart(marketChartSeries, symbol, interval);
+
+  if (marketChartStatus) {
+    marketChartStatus.textContent = `Live ${symbol} ${interval} chart is streaming from MEXC.`;
+  }
 }
 
 function handleChartVisibilityChange() {
