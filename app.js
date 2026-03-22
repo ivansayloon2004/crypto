@@ -6,6 +6,8 @@ const FAVORITES_STORAGE_KEY = "crypto-calendar-favorites-v1";
 const ALERTS_STORAGE_KEY = "crypto-calendar-alerts-v1";
 const SYMBOL_JOURNAL_STORAGE_KEY = "crypto-calendar-symbol-journal-v1";
 const WATCHLISTS_STORAGE_KEY = "crypto-calendar-watchlists-v1";
+const GOALS_STORAGE_KEY = "crypto-calendar-goals-v1";
+const HABITS_STORAGE_KEY = "crypto-calendar-habits-v1";
 const API_BASE_URL = window.location.origin;
 const MEXC_MARKET_WS_URL = "wss://wbs-api.mexc.com/ws";
 const LEGACY_DEMO_NOTES = new Set([
@@ -31,7 +33,18 @@ const state = {
   alerts: loadAlerts(),
   symbolJournal: loadSymbolJournal(),
   watchlists: loadWatchlists(),
+  goals: loadGoals(),
+  habitsByDate: loadHabits(),
   selectedWatchlist: "all",
+  filters: {
+    symbol: "",
+    side: "all",
+    result: "all",
+    marketType: "all",
+    startDate: "",
+    endDate: "",
+  },
+  replayIndexByDate: {},
   tradeHistorySort: {
     key: "executedAt",
     direction: "desc",
@@ -44,6 +57,8 @@ const state = {
   chartOffset: 0,
   chartHoverIndex: -1,
   chartVisibleSeries: [],
+  calendarHeatmapMode: false,
+  activeDrawerSymbol: "",
 };
 
 const monthLabel = document.getElementById("monthLabel");
@@ -67,6 +82,11 @@ const mobileDockMarkets = document.getElementById("mobileDockMarkets");
 const mobileDockDay = document.getElementById("mobileDockDay");
 const mobileDockMexc = document.getElementById("mobileDockMexc");
 const mobileDockAi = document.getElementById("mobileDockAi");
+const onboardingModal = document.getElementById("onboardingModal");
+const onboardingBackdrop = document.getElementById("onboardingBackdrop");
+const closeOnboardingButton = document.getElementById("closeOnboardingButton");
+const startOnboardingButton = document.getElementById("startOnboardingButton");
+const skipOnboardingButton = document.getElementById("skipOnboardingButton");
 const calendarGrid = document.getElementById("calendarGrid");
 const weekdayRow = document.getElementById("weekdayRow");
 const selectedDateLabel = document.getElementById("selectedDateLabel");
@@ -97,8 +117,13 @@ const marketChartStatus = document.getElementById("marketChartStatus");
 const marketChartTitle = document.getElementById("marketChartTitle");
 const marketChartMeta = document.getElementById("marketChartMeta");
 const marketChartPrice = document.getElementById("marketChartPrice");
+const mobileTradeSymbol = document.getElementById("mobileTradeSymbol");
+const mobileTradeMeta = document.getElementById("mobileTradeMeta");
+const mobileTradePrice = document.getElementById("mobileTradePrice");
+const mobileTradeChange = document.getElementById("mobileTradeChange");
 const marketChartLiveBadge = document.getElementById("marketChartLiveBadge");
 const marketChartCanvas = document.getElementById("marketChartCanvas");
+const calendarModeButton = document.getElementById("calendarModeButton");
 const zoomInButton = document.getElementById("zoomInButton");
 const zoomOutButton = document.getElementById("zoomOutButton");
 const resetViewButton = document.getElementById("resetViewButton");
@@ -114,11 +139,39 @@ const chartModalBackdrop = document.getElementById("chartModalBackdrop");
 const closeChartModalButton = document.getElementById("closeChartModalButton");
 const chartModalTitle = document.getElementById("chartModalTitle");
 const chartModalCanvas = document.getElementById("chartModalCanvas");
+const symbolDrawer = document.getElementById("symbolDrawer");
+const symbolDrawerBackdrop = document.getElementById("symbolDrawerBackdrop");
+const closeSymbolDrawerButton = document.getElementById("closeSymbolDrawerButton");
+const symbolDrawerTitle = document.getElementById("symbolDrawerTitle");
+const symbolDrawerStats = document.getElementById("symbolDrawerStats");
+const symbolDrawerJournal = document.getElementById("symbolDrawerJournal");
+const symbolDrawerOpenChartButton = document.getElementById("symbolDrawerOpenChartButton");
+const symbolDrawerAddAlertButton = document.getElementById("symbolDrawerAddAlertButton");
+const symbolDrawerSaveWatchlistButton = document.getElementById("symbolDrawerSaveWatchlistButton");
 const equityCurveCanvas = document.getElementById("equityCurveCanvas");
 const dailyPnlCanvas = document.getElementById("dailyPnlCanvas");
 const monthlyReviewGrid = document.getElementById("monthlyReviewGrid");
 const symbolPnlTable = document.getElementById("symbolPnlTable");
 const tradeHistoryTable = document.getElementById("tradeHistoryTable");
+const riskMetricsGrid = document.getElementById("riskMetricsGrid");
+const insightsGrid = document.getElementById("insightsGrid");
+const symbolPerformanceTable = document.getElementById("symbolPerformanceTable");
+const tradeReplayPanel = document.getElementById("tradeReplayPanel");
+const filterSymbolInput = document.getElementById("filterSymbolInput");
+const filterSideSelect = document.getElementById("filterSideSelect");
+const filterResultSelect = document.getElementById("filterResultSelect");
+const filterMarketTypeSelect = document.getElementById("filterMarketTypeSelect");
+const filterStartDateInput = document.getElementById("filterStartDateInput");
+const filterEndDateInput = document.getElementById("filterEndDateInput");
+const clearFiltersButton = document.getElementById("clearFiltersButton");
+const goalsForm = document.getElementById("goalsForm");
+const goalMonthlyPnlInput = document.getElementById("goalMonthlyPnlInput");
+const goalMaxLossInput = document.getElementById("goalMaxLossInput");
+const goalMaxTradesInput = document.getElementById("goalMaxTradesInput");
+const habitTagSelect = document.getElementById("habitTagSelect");
+const saveHabitButton = document.getElementById("saveHabitButton");
+const goalsStatus = document.getElementById("goalsStatus");
+const habitSummary = document.getElementById("habitSummary");
 const exportCsvButton = document.getElementById("exportCsvButton");
 const exportJsonButton = document.getElementById("exportJsonButton");
 const printReportButton = document.getElementById("printReportButton");
@@ -206,6 +259,16 @@ mobileDockAi?.addEventListener("click", () => {
   switchSidebarPane("ai");
   scrollSidebarIntoView();
 });
+mobileTradeSymbol?.addEventListener("click", () => openSymbolDrawer(String(marketSymbolInput?.value || "").trim().toUpperCase()));
+mobileTradePrice?.addEventListener("click", () => openSymbolDrawer(String(marketSymbolInput?.value || "").trim().toUpperCase()));
+onboardingBackdrop?.addEventListener("click", closeOnboarding);
+closeOnboardingButton?.addEventListener("click", closeOnboarding);
+startOnboardingButton?.addEventListener("click", () => {
+  closeOnboarding();
+  switchSidebarPane("mexc");
+  scrollSidebarIntoView();
+});
+skipOnboardingButton?.addEventListener("click", completeOnboarding);
 
 document.getElementById("prevMonthButton").addEventListener("click", () => {
   state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() - 1, 1);
@@ -323,15 +386,54 @@ watchlistSelect?.addEventListener("change", handleWatchlistChange);
 createWatchlistButton?.addEventListener("click", createWatchlistFolder);
 saveCurrentToWatchlistButton?.addEventListener("click", saveCurrentSymbolToWatchlist);
 deleteWatchlistButton?.addEventListener("click", deleteCurrentWatchlist);
+filterSymbolInput?.addEventListener("input", handleFiltersChanged);
+filterSideSelect?.addEventListener("change", handleFiltersChanged);
+filterResultSelect?.addEventListener("change", handleFiltersChanged);
+filterMarketTypeSelect?.addEventListener("change", handleFiltersChanged);
+filterStartDateInput?.addEventListener("change", handleFiltersChanged);
+filterEndDateInput?.addEventListener("change", handleFiltersChanged);
+clearFiltersButton?.addEventListener("click", clearFilters);
 chartImageInput.addEventListener("change", handleChartPreview);
 openChartModalButton?.addEventListener("click", openChartModal);
 chartModalBackdrop?.addEventListener("click", closeChartModal);
 closeChartModalButton?.addEventListener("click", closeChartModal);
+calendarModeButton?.addEventListener("click", toggleCalendarHeatmap);
+symbolDrawerBackdrop?.addEventListener("click", closeSymbolDrawer);
+closeSymbolDrawerButton?.addEventListener("click", closeSymbolDrawer);
+symbolDrawerOpenChartButton?.addEventListener("click", () => {
+  if (!state.activeDrawerSymbol) {
+    return;
+  }
+  marketSymbolInput.value = state.activeDrawerSymbol;
+  switchMainWindow("markets");
+  closeSymbolDrawer();
+  renderMarketList();
+  renderMarketSymbolChips();
+  loadMarketChart();
+});
+symbolDrawerAddAlertButton?.addEventListener("click", () => {
+  if (!state.activeDrawerSymbol) {
+    return;
+  }
+  alertSymbolInput.value = state.activeDrawerSymbol;
+  seedAlertFormFromCurrentSymbol();
+  switchSidebarPane("day");
+  closeSymbolDrawer();
+});
+symbolDrawerSaveWatchlistButton?.addEventListener("click", () => {
+  if (!state.activeDrawerSymbol) {
+    return;
+  }
+  marketSymbolInput.value = state.activeDrawerSymbol;
+  saveCurrentSymbolToWatchlist();
+});
 exportCsvButton?.addEventListener("click", exportTradesCsv);
 exportJsonButton?.addEventListener("click", exportWorkspaceJson);
 printReportButton?.addEventListener("click", () => window.print());
 runMonthlyAiReviewButton?.addEventListener("click", runMonthlyAiReview);
 installAppButton?.addEventListener("click", installPwaApp);
+goalsForm?.addEventListener("submit", saveGoals);
+saveHabitButton?.addEventListener("click", saveHabitTagForSelectedDate);
 fieldToggles.forEach((button) => {
   button.addEventListener("click", () => toggleSecretField(button));
 });
@@ -426,17 +528,24 @@ function initializeDashboard() {
   renderSelectedDate();
   hydrateDayNoteForm();
   renderWatchlistOptions();
+  hydrateGoalsForm();
   renderMarketSymbolChips();
   updateLiveChartUi();
+  updateMobileTradeBar();
   hydrateSymbolJournal();
   renderAlerts();
   renderSymbolAnalytics();
   renderMiniCharts();
   renderPerformanceCharts();
+  renderHabitSummary();
+  renderTradeReplay();
   loadMarketCatalog();
   loadMarketChart();
   switchMainWindow(state.currentWindow || "overview");
   switchSidebarPane(state.currentSidebarPane || "day");
+  if (!state.goals.onboardingCompleted) {
+    openOnboarding();
+  }
 }
 
 function switchMainWindow(view) {
@@ -483,6 +592,20 @@ function scrollSidebarIntoView() {
   sidebar?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function openOnboarding() {
+  onboardingModal?.classList.remove("is-hidden");
+}
+
+function closeOnboarding() {
+  onboardingModal?.classList.add("is-hidden");
+}
+
+function completeOnboarding() {
+  state.goals.onboardingCompleted = true;
+  persistGoals();
+  closeOnboarding();
+}
+
 function openChartModal() {
   if (!chartModal || !chartModalCanvas) {
     return;
@@ -515,7 +638,7 @@ function renderStats() {
     return;
   }
 
-  const events = [...state.events];
+  const events = getFilteredEvents();
   const realizedTotal = events.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
   const unrealizedTotal = state.openPositions.reduce((sum, entry) => sum + entry.unrealizedPnl, 0);
   const realizedTrades = events.filter((entry) => entry.side === "sell");
@@ -574,14 +697,16 @@ function renderCalendar() {
     day.setDate(gridStart.getDate() + index);
 
     const dateKey = formatDateKey(day);
-    const dayEvents = getEventsForDate(dateKey);
+    const dayEvents = getEventsForDate(dateKey, true);
     const daySummary = summarizeTrades(dayEvents);
+    const dayTotal = dayEvents.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
     const isOtherMonth = day.getMonth() !== month;
     const isToday = dateKey === formatDateKey(new Date());
     const isSelected = dateKey === state.selectedDate;
+    const heatClass = state.calendarHeatmapMode ? getHeatmapClass(dayTotal) : "";
 
     cells.push(`
-      <button class="calendar-day ${isOtherMonth ? "is-other-month" : ""} ${isToday ? "is-today" : ""} ${isSelected ? "is-selected" : ""}" data-date="${dateKey}">
+      <button class="calendar-day ${isOtherMonth ? "is-other-month" : ""} ${isToday ? "is-today" : ""} ${isSelected ? "is-selected" : ""} ${heatClass}" data-date="${dateKey}">
         <div class="day-top">
           <span class="day-number">${day.getDate()}</span>
           <span class="day-count">${dayEvents.length} trade${dayEvents.length === 1 ? "" : "s"}</span>
@@ -610,7 +735,7 @@ function renderCalendar() {
 }
 
 function renderSelectedDate() {
-  const events = getEventsForDate(state.selectedDate);
+  const events = getEventsForDate(state.selectedDate, true);
   const summary = summarizeTrades(events);
   const dayNote = state.notesByDate[state.selectedDate] || "";
   const parsedDate = new Date(`${state.selectedDate}T00:00:00`);
@@ -630,6 +755,7 @@ function renderSelectedDate() {
       ${dayNote ? `<article class="day-note-card"><h3>Your Note</h3><div class="event-notes">${escapeHtml(dayNote)}</div></article>` : ""}
       <div class="empty-state">No trades on this day yet.</div>
     `;
+    renderTradeReplay();
     return;
   }
 
@@ -664,6 +790,32 @@ function renderSelectedDate() {
       deleteActivity(button.dataset.id);
     });
   });
+  renderTradeReplay();
+}
+
+function toggleCalendarHeatmap() {
+  state.calendarHeatmapMode = !state.calendarHeatmapMode;
+  if (calendarModeButton) {
+    calendarModeButton.textContent = state.calendarHeatmapMode ? "Heatmap On" : "Heatmap Off";
+    calendarModeButton.className = state.calendarHeatmapMode ? "button button-primary" : "button button-ghost";
+  }
+  renderCalendar();
+}
+
+function getHeatmapClass(dayTotal) {
+  if (dayTotal >= 100) {
+    return "heat-strong-positive";
+  }
+  if (dayTotal > 0) {
+    return "heat-positive";
+  }
+  if (dayTotal <= -100) {
+    return "heat-strong-negative";
+  }
+  if (dayTotal < 0) {
+    return "heat-negative";
+  }
+  return "";
 }
 
 async function syncMexc() {
@@ -746,6 +898,8 @@ async function hydrateCloudProfile() {
     persistAlerts(true);
     persistSymbolJournal(true);
     persistWatchlists(true);
+    persistGoals(true);
+    persistHabits(true);
     state.profileLoaded = true;
   } catch {
     state.profileLoaded = false;
@@ -775,6 +929,12 @@ function mergeCloudProfileIntoState(profile) {
     ...state.symbolJournal,
   };
   state.watchlists = sanitizeWatchlists(profile.watchlists && typeof profile.watchlists === "object" ? profile.watchlists : state.watchlists);
+  if (profile.goals && typeof profile.goals === "object") {
+    state.goals = { ...state.goals, ...profile.goals };
+  }
+  if (profile.habitsByDate && typeof profile.habitsByDate === "object") {
+    state.habitsByDate = profile.habitsByDate;
+  }
 
   const preferences = profile.preferences && typeof profile.preferences === "object" ? profile.preferences : {};
   if (preferences.currentWindow === "overview" || preferences.currentWindow === "markets") {
@@ -820,6 +980,8 @@ async function saveProfileToCloud() {
     alerts: state.alerts,
     symbolJournal: state.symbolJournal,
     watchlists: state.watchlists,
+    goals: state.goals,
+    habitsByDate: state.habitsByDate,
     preferences: {
       currentWindow: state.currentWindow,
       currentSidebarPane: state.currentSidebarPane,
@@ -1403,6 +1565,7 @@ async function loadMarketChart() {
     }
     syncMarketChartTimer();
     syncMarketChartStream(resolvedSymbol, interval);
+    updateMobileTradeBar(resolvedSymbol);
     renderSymbolAnalytics();
     renderMiniCharts();
     checkAlertsForSymbol(resolvedSymbol, getLastChartPrice());
@@ -1600,6 +1763,10 @@ function renderMarketList() {
       renderSymbolAnalytics();
       loadMarketChart();
     });
+
+    button.addEventListener("dblclick", () => {
+      openSymbolDrawer(String(button.dataset.symbol || "").trim().toUpperCase());
+    });
   });
 
   marketList.querySelectorAll(".star-button").forEach((button) => {
@@ -1623,6 +1790,7 @@ function switchMarketView(view) {
   }
   renderMarketSymbolChips();
   renderMarketList();
+  updateMobileTradeBar();
   loadMarketChart();
 }
 
@@ -1644,6 +1812,67 @@ function renderMarketTabs() {
   });
 }
 
+function updateMobileTradeBar(nextSymbol) {
+  const symbol = String(nextSymbol || marketSymbolInput?.value || "BTCUSDT").trim().toUpperCase();
+  const market = state.markets.find((entry) => entry.symbol === symbol);
+  if (mobileTradeSymbol) {
+    mobileTradeSymbol.textContent = symbol || "BTCUSDT";
+  }
+  if (mobileTradeMeta) {
+    mobileTradeMeta.textContent = `${capitalize(state.marketType)} market`;
+  }
+  if (mobileTradePrice) {
+    const lastPrice = getLastChartPrice() || Number(market?.lastPrice || 0);
+    mobileTradePrice.textContent = lastPrice > 0 ? formatCompactPrice(lastPrice) : "--";
+  }
+  if (mobileTradeChange) {
+    const change = Number(market?.priceChangePercent || 0);
+    mobileTradeChange.textContent = formatPercent(change);
+    mobileTradeChange.className = `mobile-trade-change ${change > 0 ? "positive-text" : change < 0 ? "negative-text" : "muted"}`;
+  }
+}
+
+function openSymbolDrawer(symbol) {
+  const resolvedSymbol = String(symbol || marketSymbolInput?.value || "").trim().toUpperCase();
+  if (!resolvedSymbol || !symbolDrawer) {
+    return;
+  }
+
+  state.activeDrawerSymbol = resolvedSymbol;
+  const market = state.markets.find((entry) => entry.symbol === resolvedSymbol);
+  const trades = state.events.filter((entry) => String(entry.asset || "").toUpperCase() === normalizeChartSymbol(resolvedSymbol, "spot"));
+  const realized = trades.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
+  const position = state.openPositions.find((entry) => entry.symbol === normalizeChartSymbol(resolvedSymbol, "spot"));
+  if (symbolDrawerTitle) {
+    symbolDrawerTitle.textContent = resolvedSymbol;
+  }
+  if (symbolDrawerStats) {
+    symbolDrawerStats.innerHTML = [
+      ["Last Price", formatCompactPrice(Number(market?.lastPrice || getLastChartPrice() || 0))],
+      ["24H Change", formatPercent(Number(market?.priceChangePercent || 0))],
+      ["Trades", String(trades.length)],
+      ["Realized", formatSignedMoney(realized)],
+      ["Open Qty", formatAmount(position?.quantity || 0)],
+      ["Volume", formatCompactVolume(Number(market?.quoteVolume || 0))],
+    ].map(([label, value]) => `
+      <article class="analytics-item">
+        <span class="muted">${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value)}</strong>
+      </article>
+    `).join("");
+  }
+  if (symbolDrawerJournal) {
+    symbolDrawerJournal.textContent = state.symbolJournal[resolvedSymbol] || "No journal note for this symbol yet.";
+    symbolDrawerJournal.className = state.symbolJournal[resolvedSymbol] ? "ai-result" : "ai-result empty-state";
+  }
+  symbolDrawer.classList.remove("is-hidden");
+}
+
+function closeSymbolDrawer() {
+  symbolDrawer?.classList.add("is-hidden");
+  state.activeDrawerSymbol = "";
+}
+
 function toggleCurrentFavorite() {
   toggleFavoriteSymbol(String(marketSymbolInput?.value || "").trim().toUpperCase());
 }
@@ -1660,6 +1889,7 @@ function toggleFavoriteSymbol(symbol) {
   renderMarketSymbolChips();
   renderMarketList();
   renderMiniCharts();
+  updateMobileTradeBar();
 }
 
 function seedAlertFormFromCurrentSymbol() {
@@ -1908,6 +2138,9 @@ function renderPerformanceCharts() {
   renderMonthlyReview();
   renderSymbolPnlTable();
   renderTradeHistoryTable();
+  renderRiskMetrics();
+  renderInsights();
+  renderSymbolPerformanceTable();
 }
 
 function renderMonthlyReview() {
@@ -1916,7 +2149,7 @@ function renderMonthlyReview() {
   }
 
   const monthKey = `${state.currentMonth.getFullYear()}-${String(state.currentMonth.getMonth() + 1).padStart(2, "0")}`;
-  const monthEvents = state.events.filter((entry) => entry.date.startsWith(monthKey));
+  const monthEvents = getFilteredEvents().filter((entry) => entry.date.startsWith(monthKey));
   const sells = monthEvents.filter((entry) => entry.side === "sell");
   const realized = monthEvents.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
   const wins = sells.filter((entry) => getRealizedPnl(entry) > 0).length;
@@ -1945,7 +2178,7 @@ function renderSymbolPnlTable() {
     return;
   }
 
-  const rows = [...groupTradesBySymbol(state.events).values()]
+  const rows = [...groupTradesBySymbol(getFilteredEvents()).values()]
     .map((group) => {
       const sellCount = group.trades.filter((entry) => entry.side === "sell").length;
       const winCount = group.trades.filter((entry) => entry.side === "sell" && getRealizedPnl(entry) > 0).length;
@@ -2046,7 +2279,7 @@ function renderTradeHistorySortButton(label, key) {
 }
 
 function getSortedTradeHistoryRows() {
-  const rows = [...state.events];
+  const rows = [...getFilteredEvents()];
   const key = state.tradeHistorySort.key;
   const factor = state.tradeHistorySort.direction === "asc" ? 1 : -1;
 
@@ -2067,6 +2300,110 @@ function getSortedTradeHistoryRows() {
   return rows;
 }
 
+function renderRiskMetrics() {
+  if (!riskMetricsGrid) {
+    return;
+  }
+
+  const events = getFilteredEvents();
+  const sells = events.filter((entry) => entry.side === "sell");
+  const wins = sells.filter((entry) => getRealizedPnl(entry) > 0).map((entry) => getRealizedPnl(entry));
+  const losses = sells.filter((entry) => getRealizedPnl(entry) < 0).map((entry) => Math.abs(getRealizedPnl(entry)));
+  const avgWin = wins.length ? wins.reduce((sum, value) => sum + value, 0) / wins.length : 0;
+  const avgLoss = losses.length ? losses.reduce((sum, value) => sum + value, 0) / losses.length : 0;
+  const profitFactor = avgLoss > 0 ? wins.reduce((sum, value) => sum + value, 0) / losses.reduce((sum, value) => sum + value, 0) : 0;
+  const expectancy = sells.length > 0 ? events.filter((entry) => entry.side === "sell").reduce((sum, entry) => sum + getRealizedPnl(entry), 0) / sells.length : 0;
+  const drawdown = calculateMaxDrawdown(events);
+  const streaks = calculateWinLossStreaks(sells);
+
+  riskMetricsGrid.innerHTML = [
+    ["Profit Factor", profitFactor > 0 ? profitFactor.toFixed(2) : "0.00"],
+    ["Average Win", formatSignedMoney(avgWin)],
+    ["Average Loss", avgLoss > 0 ? `-${formatMoney(avgLoss)}` : "0.00"],
+    ["Expectancy", formatSignedMoney(expectancy)],
+    ["Max Drawdown", drawdown < 0 ? formatSignedMoney(drawdown) : "0.00"],
+    ["Best Streak", `${streaks.bestWin}W / ${streaks.bestLoss}L`],
+  ].map(([label, value]) => `
+    <article class="analytics-item">
+      <span class="muted">${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </article>
+  `).join("");
+}
+
+function renderInsights() {
+  if (!insightsGrid) {
+    return;
+  }
+
+  const events = getFilteredEvents();
+  const grouped = [...groupTradesBySymbol(events).values()]
+    .map((group) => ({
+      symbol: group.symbol,
+      realized: group.trades.reduce((sum, entry) => sum + getRealizedPnl(entry), 0),
+      trades: group.trades.length,
+    }))
+    .sort((left, right) => right.realized - left.realized);
+  const bestSymbol = grouped[0];
+  const worstSymbol = [...grouped].sort((left, right) => left.realized - right.realized)[0];
+  const dayTotals = getDailyRealizedTotals(events).sort((left, right) => right.pnl - left.pnl);
+  const habits = summarizeHabitTags();
+
+  insightsGrid.innerHTML = [
+    ["Best Symbol", bestSymbol ? `${bestSymbol.symbol} ${formatSignedMoney(bestSymbol.realized)}` : "No data yet"],
+    ["Worst Symbol", worstSymbol ? `${worstSymbol.symbol} ${formatSignedMoney(worstSymbol.realized)}` : "No data yet"],
+    ["Best Day", dayTotals[0] ? `${formatShortDate(dayTotals[0].date)} ${formatSignedMoney(dayTotals[0].pnl)}` : "No data yet"],
+    ["Top Habit Tag", habits[0] ? `${formatHabitLabel(habits[0][0])} (${habits[0][1]})` : "No tags yet"],
+  ].map(([label, value]) => `
+    <article class="analytics-item">
+      <span class="muted">${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </article>
+  `).join("");
+}
+
+function renderSymbolPerformanceTable() {
+  if (!symbolPerformanceTable) {
+    return;
+  }
+
+  const rows = [...groupTradesBySymbol(getFilteredEvents()).values()]
+    .map((group) => {
+      const sells = group.trades.filter((entry) => entry.side === "sell");
+      const wins = sells.filter((entry) => getRealizedPnl(entry) > 0).length;
+      return {
+        symbol: group.symbol,
+        trades: group.trades.length,
+        realized: group.trades.reduce((sum, entry) => sum + getRealizedPnl(entry), 0),
+        winRate: sells.length ? ((wins / sells.length) * 100).toFixed(1) : "0.0",
+      };
+    })
+    .sort((left, right) => Math.abs(right.realized) - Math.abs(left.realized))
+    .slice(0, 12);
+
+  if (rows.length === 0) {
+    symbolPerformanceTable.innerHTML = `<div class="empty-state">Sync trades to build symbol performance history.</div>`;
+    return;
+  }
+
+  symbolPerformanceTable.innerHTML = `
+    <div class="table-head">
+      <span>Symbol</span>
+      <span>Trades</span>
+      <span>Win Rate</span>
+      <span>Realized</span>
+    </div>
+    ${rows.map((row) => `
+      <div class="table-row">
+        <span><strong>${escapeHtml(row.symbol)}</strong></span>
+        <span>${row.trades}</span>
+        <span>${row.winRate}%</span>
+        <span class="${row.realized > 0 ? "positive-text" : row.realized < 0 ? "negative-text" : ""}">${formatSignedMoney(row.realized)}</span>
+      </div>
+    `).join("")}
+  `;
+}
+
 function drawEquityCurve() {
   if (!equityCurveCanvas) {
     return;
@@ -2074,7 +2411,7 @@ function drawEquityCurve() {
 
   const context = equityCurveCanvas.getContext("2d");
   context.clearRect(0, 0, equityCurveCanvas.width, equityCurveCanvas.height);
-  const dayTotals = getDailyRealizedTotals(state.events).sort((left, right) => left.date.localeCompare(right.date));
+  const dayTotals = getDailyRealizedTotals(getFilteredEvents()).sort((left, right) => left.date.localeCompare(right.date));
   if (dayTotals.length === 0) {
     drawEmptyCanvasMessage(context, equityCurveCanvas, "Sync trades to see your equity curve.");
     return;
@@ -2097,7 +2434,7 @@ function drawDailyPnlBars() {
 
   const context = dailyPnlCanvas.getContext("2d");
   context.clearRect(0, 0, dailyPnlCanvas.width, dailyPnlCanvas.height);
-  const dayTotals = getDailyRealizedTotals(state.events).sort((left, right) => left.date.localeCompare(right.date));
+  const dayTotals = getDailyRealizedTotals(getFilteredEvents()).sort((left, right) => left.date.localeCompare(right.date));
   if (dayTotals.length === 0) {
     drawEmptyCanvasMessage(context, dailyPnlCanvas, "Your daily realized P/L will appear here.");
     return;
@@ -2774,6 +3111,48 @@ function persistNotes(skipCloud = false) {
   }
 }
 
+function loadGoals() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(GOALS_STORAGE_KEY) || "{}");
+    return {
+      monthlyPnlTarget: Number(parsed.monthlyPnlTarget || 0),
+      maxLossLimit: Number(parsed.maxLossLimit || 0),
+      maxTradesPerDay: Number(parsed.maxTradesPerDay || 0),
+      onboardingCompleted: Boolean(parsed.onboardingCompleted),
+    };
+  } catch {
+    return {
+      monthlyPnlTarget: 0,
+      maxLossLimit: 0,
+      maxTradesPerDay: 0,
+      onboardingCompleted: false,
+    };
+  }
+}
+
+function persistGoals(skipCloud = false) {
+  localStorage.setItem(GOALS_STORAGE_KEY, JSON.stringify(state.goals));
+  if (!skipCloud) {
+    scheduleProfileSave();
+  }
+}
+
+function loadHabits() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(HABITS_STORAGE_KEY) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function persistHabits(skipCloud = false) {
+  localStorage.setItem(HABITS_STORAGE_KEY, JSON.stringify(state.habitsByDate));
+  if (!skipCloud) {
+    scheduleProfileSave();
+  }
+}
+
 function loadFavorites() {
   try {
     const parsed = JSON.parse(localStorage.getItem(FAVORITES_STORAGE_KEY) || "[]");
@@ -2816,6 +3195,127 @@ function persistWatchlists(skipCloud = false) {
   if (!skipCloud) {
     scheduleProfileSave();
   }
+}
+
+function hydrateGoalsForm() {
+  if (goalMonthlyPnlInput) {
+    goalMonthlyPnlInput.value = state.goals.monthlyPnlTarget || "";
+  }
+  if (goalMaxLossInput) {
+    goalMaxLossInput.value = state.goals.maxLossLimit || "";
+  }
+  if (goalMaxTradesInput) {
+    goalMaxTradesInput.value = state.goals.maxTradesPerDay || "";
+  }
+}
+
+function saveGoals(event) {
+  event.preventDefault();
+  state.goals.monthlyPnlTarget = Number(goalMonthlyPnlInput?.value || 0);
+  state.goals.maxLossLimit = Number(goalMaxLossInput?.value || 0);
+  state.goals.maxTradesPerDay = Number(goalMaxTradesInput?.value || 0);
+  persistGoals();
+  goalsStatus.textContent = "Goals saved.";
+  renderInsights();
+}
+
+function saveHabitTagForSelectedDate() {
+  const tag = String(habitTagSelect?.value || "").trim();
+  if (!tag) {
+    return;
+  }
+  state.habitsByDate[state.selectedDate] = [...new Set([...(state.habitsByDate[state.selectedDate] || []), tag])];
+  persistHabits();
+  renderHabitSummary();
+  renderInsights();
+  goalsStatus.textContent = `Saved ${formatHabitLabel(tag)} for ${formatShortDate(state.selectedDate)}.`;
+}
+
+function renderHabitSummary() {
+  if (!habitSummary) {
+    return;
+  }
+  const entries = Object.entries(state.habitsByDate).filter(([, tags]) => Array.isArray(tags) && tags.length > 0);
+  if (entries.length === 0) {
+    habitSummary.className = "event-list empty-state";
+    habitSummary.textContent = "No habit tags saved yet.";
+    return;
+  }
+  habitSummary.className = "event-list";
+  habitSummary.innerHTML = entries.slice(-6).reverse().map(([date, tags]) => `
+    <article class="event-item">
+      <div class="event-meta">
+        <span class="event-type">habit</span>
+        <span>${escapeHtml(formatShortDate(date))}</span>
+      </div>
+      <div class="trade-stats">
+        ${tags.map((tag) => `<span class="event-chip muted-chip">${escapeHtml(formatHabitLabel(tag))}</span>`).join("")}
+      </div>
+    </article>
+  `).join("");
+}
+
+function summarizeHabitTags() {
+  const counts = new Map();
+  Object.values(state.habitsByDate).forEach((tags) => {
+    (Array.isArray(tags) ? tags : []).forEach((tag) => {
+      counts.set(tag, (counts.get(tag) || 0) + 1);
+    });
+  });
+  return [...counts.entries()].sort((left, right) => right[1] - left[1]);
+}
+
+function formatHabitLabel(tag) {
+  return String(tag || "").split("-").map((part) => capitalize(part)).join(" ");
+}
+
+function renderTradeReplay() {
+  if (!tradeReplayPanel) {
+    return;
+  }
+  const events = getEventsForDate(state.selectedDate, true).sort((left, right) => (left.executedAt || "").localeCompare(right.executedAt || ""));
+  if (events.length === 0) {
+    tradeReplayPanel.className = "event-list empty-state";
+    tradeReplayPanel.textContent = "Pick a day with trades to review them one by one.";
+    return;
+  }
+
+  const index = Math.min(events.length - 1, Math.max(0, state.replayIndexByDate[state.selectedDate] || 0));
+  state.replayIndexByDate[state.selectedDate] = index;
+  const entry = events[index];
+  tradeReplayPanel.className = "event-list";
+  tradeReplayPanel.innerHTML = `
+    <article class="event-item">
+      <div class="event-meta">
+        <span class="event-type">replay</span>
+        <span>${index + 1} / ${events.length}</span>
+      </div>
+      <h3>${escapeHtml(entry.asset)} ${escapeHtml(entry.side || "trade")}</h3>
+      <div class="trade-stats">
+        <span>Time: ${escapeHtml(formatDateTime(Date.parse(entry.executedAt || `${entry.date}T00:00:00Z`) || 0))}</span>
+        <span>Qty: ${formatAmount(entry.amount)}</span>
+        <span>Price: ${formatMoney(entry.price)}</span>
+        <span class="${getRealizedPnl(entry) >= 0 ? "positive-text" : "negative-text"}">Realized: ${formatSignedMoney(getRealizedPnl(entry))}</span>
+      </div>
+      <div class="stack-row">
+        <button class="button button-ghost" type="button" data-replay-step="-1">Previous</button>
+        <button class="button button-secondary" type="button" data-replay-open="${escapeHtml(entry.asset)}">Open Symbol</button>
+        <button class="button button-ghost" type="button" data-replay-step="1">Next</button>
+      </div>
+    </article>
+  `;
+  tradeReplayPanel.querySelectorAll("[data-replay-step]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const step = Number(button.dataset.replayStep || 0);
+      state.replayIndexByDate[state.selectedDate] = Math.min(events.length - 1, Math.max(0, index + step));
+      renderTradeReplay();
+    });
+  });
+  tradeReplayPanel.querySelector("[data-replay-open]")?.addEventListener("click", () => {
+    marketSymbolInput.value = String(entry.asset || "").toUpperCase();
+    switchMainWindow("markets");
+    loadMarketChart();
+  });
 }
 
 function loadAlerts() {
@@ -2912,14 +3412,103 @@ function groupTradesBySymbol(events) {
   }, new Map());
 }
 
+function calculateMaxDrawdown(events) {
+  const dayTotals = getDailyRealizedTotals(events).sort((left, right) => left.date.localeCompare(right.date));
+  let equity = 0;
+  let peak = 0;
+  let maxDrawdown = 0;
+  dayTotals.forEach((entry) => {
+    equity += entry.pnl;
+    peak = Math.max(peak, equity);
+    maxDrawdown = Math.min(maxDrawdown, equity - peak);
+  });
+  return maxDrawdown;
+}
+
+function calculateWinLossStreaks(sells) {
+  let bestWin = 0;
+  let bestLoss = 0;
+  let currentWin = 0;
+  let currentLoss = 0;
+  sells.forEach((entry) => {
+    if (getRealizedPnl(entry) > 0) {
+      currentWin += 1;
+      currentLoss = 0;
+    } else if (getRealizedPnl(entry) < 0) {
+      currentLoss += 1;
+      currentWin = 0;
+    }
+    bestWin = Math.max(bestWin, currentWin);
+    bestLoss = Math.max(bestLoss, currentLoss);
+  });
+  return { bestWin, bestLoss };
+}
+
+function getFilteredEvents() {
+  return state.events.filter((entry) => {
+    if (state.filters.symbol && !String(entry.asset || "").toUpperCase().includes(state.filters.symbol)) {
+      return false;
+    }
+    if (state.filters.side !== "all" && entry.side !== state.filters.side) {
+      return false;
+    }
+    if (state.filters.result === "wins" && getRealizedPnl(entry) <= 0) {
+      return false;
+    }
+    if (state.filters.result === "losses" && getRealizedPnl(entry) >= 0) {
+      return false;
+    }
+    if (state.filters.marketType === "spot" && String(entry.asset || "").includes("_")) {
+      return false;
+    }
+    if (state.filters.marketType === "futures" && !String(entry.asset || "").includes("_")) {
+      return false;
+    }
+    if (state.filters.startDate && entry.date < state.filters.startDate) {
+      return false;
+    }
+    if (state.filters.endDate && entry.date > state.filters.endDate) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function handleFiltersChanged() {
+  state.filters = {
+    symbol: String(filterSymbolInput?.value || "").trim().toUpperCase(),
+    side: String(filterSideSelect?.value || "all"),
+    result: String(filterResultSelect?.value || "all"),
+    marketType: String(filterMarketTypeSelect?.value || "all"),
+    startDate: String(filterStartDateInput?.value || ""),
+    endDate: String(filterEndDateInput?.value || ""),
+  };
+  renderStats();
+  renderCalendar();
+  renderSelectedDate();
+  renderPerformanceCharts();
+}
+
+function clearFilters() {
+  state.filters = { symbol: "", side: "all", result: "all", marketType: "all", startDate: "", endDate: "" };
+  if (filterSymbolInput) filterSymbolInput.value = "";
+  if (filterSideSelect) filterSideSelect.value = "all";
+  if (filterResultSelect) filterResultSelect.value = "all";
+  if (filterMarketTypeSelect) filterMarketTypeSelect.value = "all";
+  if (filterStartDateInput) filterStartDateInput.value = "";
+  if (filterEndDateInput) filterEndDateInput.value = "";
+  handleFiltersChanged();
+}
+
 function renderTradeHistorySortButton(label, key) {
   const active = state.tradeHistorySort.key === key;
   const arrow = active ? (state.tradeHistorySort.direction === "asc" ? "^" : "v") : "";
   return `<button class="button ${active ? "button-primary" : "button-ghost"}" type="button" data-sort-key="${escapeHtml(key)}">${escapeHtml(label)} ${arrow}</button>`;
 }
 
-function getEventsForDate(dateKey) {
-  return state.events.filter((entry) => entry.date === dateKey);
+function getEventsForDate(dateKey, filtered = false) {
+  const source = filtered ? getFilteredEvents() : state.events;
+  return source.filter((entry) => entry.date === dateKey);
 }
 
 function normalizeEvent(entry) {

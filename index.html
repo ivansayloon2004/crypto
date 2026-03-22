@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div id="appSplash" class="app-splash">
+  <div id="appSplash" class="app-splash is-hidden">
     <div class="app-splash-mark">CryptoCal</div>
     <p class="app-splash-copy">Preparing your trading workspace...</p>
   </div>
@@ -33,6 +33,41 @@
       <p id="loginStatus" class="muted">
         Google sign-in is loading...
       </p>
+    </section>
+  </div>
+
+  <div id="onboardingModal" class="symbol-drawer is-hidden">
+    <div id="onboardingBackdrop" class="symbol-drawer-backdrop"></div>
+    <section class="symbol-drawer-panel onboarding-panel">
+      <div class="section-head">
+        <div>
+          <p class="section-label">Quick Setup</p>
+          <h2>Get Your Workspace Ready</h2>
+        </div>
+        <button id="closeOnboardingButton" class="button button-ghost" type="button">Close</button>
+      </div>
+      <div class="analytics-grid">
+        <article class="analytics-item">
+          <span class="muted">1. Sign In</span>
+          <strong>Use Google to unlock your saved workspace.</strong>
+        </article>
+        <article class="analytics-item">
+          <span class="muted">2. Connect MEXC</span>
+          <strong>Add a read-only API key and sync your trades.</strong>
+        </article>
+        <article class="analytics-item">
+          <span class="muted">3. Set Filters</span>
+          <strong>Focus on one symbol, one side, or one date range.</strong>
+        </article>
+        <article class="analytics-item">
+          <span class="muted">4. Track Habits</span>
+          <strong>Review notes, discipline tags, and monthly patterns.</strong>
+        </article>
+      </div>
+      <div class="stack-row">
+        <button id="startOnboardingButton" class="button button-secondary" type="button">Start Setup</button>
+        <button id="skipOnboardingButton" class="button button-ghost" type="button">Skip For Now</button>
+      </div>
     </section>
   </div>
 
@@ -76,6 +111,58 @@
         </div>
 
         <section id="overviewWindow" class="window-pane is-active">
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <p class="section-label">Filters</p>
+                <h2>Calendar Filter Bar</h2>
+              </div>
+              <button id="clearFiltersButton" class="button button-ghost" type="button">Clear Filters</button>
+            </div>
+            <div class="split-fields">
+              <label>
+                Symbol
+                <input id="filterSymbolInput" type="text" placeholder="BTCUSDT" />
+              </label>
+              <label>
+                Side
+                <select id="filterSideSelect">
+                  <option value="all">All</option>
+                  <option value="buy">Buy</option>
+                  <option value="sell">Sell</option>
+                </select>
+              </label>
+            </div>
+            <div class="split-fields">
+              <label>
+                Result
+                <select id="filterResultSelect">
+                  <option value="all">All</option>
+                  <option value="wins">Wins</option>
+                  <option value="losses">Losses</option>
+                </select>
+              </label>
+              <label>
+                Market
+                <select id="filterMarketTypeSelect">
+                  <option value="all">All</option>
+                  <option value="spot">Spot</option>
+                  <option value="futures">Futures</option>
+                </select>
+              </label>
+            </div>
+            <div class="split-fields">
+              <label>
+                From
+                <input id="filterStartDateInput" type="date" />
+              </label>
+              <label>
+                To
+                <input id="filterEndDateInput" type="date" />
+              </label>
+            </div>
+          </section>
+
           <section class="stats-grid" id="statsGrid">
             <article class="card stat-card">
               <p class="section-label">Realized P/L</p>
@@ -151,6 +238,58 @@
           <section class="card">
             <div class="section-head">
               <div>
+                <p class="section-label">Risk</p>
+                <h2>Risk Metrics</h2>
+              </div>
+            </div>
+            <div id="riskMetricsGrid" class="analytics-grid"></div>
+          </section>
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <p class="section-label">Goals</p>
+                <h2>Trading Goals And Habits</h2>
+              </div>
+            </div>
+            <form id="goalsForm" class="activity-form compact-form">
+              <div class="split-fields">
+                <label>
+                  Monthly P/L Target
+                  <input id="goalMonthlyPnlInput" type="number" step="0.01" placeholder="1000" />
+                </label>
+                <label>
+                  Max Loss Limit
+                  <input id="goalMaxLossInput" type="number" step="0.01" placeholder="-500" />
+                </label>
+              </div>
+              <div class="split-fields">
+                <label>
+                  Max Trades Per Day
+                  <input id="goalMaxTradesInput" type="number" step="1" placeholder="5" />
+                </label>
+                <label>
+                  Selected Day Habit
+                  <select id="habitTagSelect">
+                    <option value="followed-plan">Followed Plan</option>
+                    <option value="good-risk">Good Risk</option>
+                    <option value="fomo">FOMO</option>
+                    <option value="moved-stop">Moved Stop</option>
+                    <option value="overtraded">Overtraded</option>
+                    <option value="revenge-trade">Revenge Trade</option>
+                  </select>
+                </label>
+              </div>
+              <div class="stack-row">
+                <button type="submit" class="button button-secondary">Save Goals</button>
+                <button id="saveHabitButton" type="button" class="button button-ghost">Save Habit Tag</button>
+              </div>
+            </form>
+            <div id="goalsStatus" class="muted">Set your monthly target, risk limits, and habit tags.</div>
+            <div id="habitSummary" class="event-list empty-state">No habit tags saved yet.</div>
+          </section>
+          <section class="card">
+            <div class="section-head">
+              <div>
                 <p class="section-label">Review</p>
                 <h2>Monthly Review And Symbol P/L</h2>
               </div>
@@ -169,6 +308,24 @@
                 <div id="symbolPnlTable" class="table-shell"></div>
               </div>
             </div>
+          </section>
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <p class="section-label">Insights</p>
+                <h2>Smart Insights</h2>
+              </div>
+            </div>
+            <div id="insightsGrid" class="analytics-grid"></div>
+          </section>
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <p class="section-label">Symbols</p>
+                <h2>Symbol Performance Page</h2>
+              </div>
+            </div>
+            <div id="symbolPerformanceTable" class="table-shell"></div>
           </section>
           <section class="card">
             <div class="section-head">
@@ -419,6 +576,13 @@
           <div id="selectedDateEvents" class="event-list empty-state">
             Pick a day on the calendar to inspect activity.
           </div>
+          <div class="section-head">
+            <div>
+              <p class="section-label">Replay</p>
+              <h2>Trade Replay</h2>
+            </div>
+          </div>
+          <div id="tradeReplayPanel" class="event-list empty-state">Pick a day with trades to review them one by one.</div>
         </section>
         </section>
 
@@ -608,11 +772,6 @@
   </div>
 
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script>
-    window.setTimeout(() => {
-      document.getElementById("appSplash")?.classList.add("is-hidden");
-    }, 2500);
-  </script>
   <script src="./app.js"></script>
 </body>
 </html>

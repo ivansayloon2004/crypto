@@ -734,6 +734,8 @@ function getDefaultProfile() {
     alerts: [],
     symbolJournal: {},
     watchlists: { Main: [] },
+    goals: {},
+    habitsByDate: {},
     preferences: {},
     updatedAt: null,
   };
@@ -748,6 +750,8 @@ function sanitizeProfilePayload(profile) {
     alerts: Array.isArray(source.alerts) ? source.alerts : [],
     symbolJournal: source.symbolJournal && typeof source.symbolJournal === "object" ? source.symbolJournal : {},
     watchlists: source.watchlists && typeof source.watchlists === "object" ? source.watchlists : { Main: [] },
+    goals: source.goals && typeof source.goals === "object" ? source.goals : {},
+    habitsByDate: source.habitsByDate && typeof source.habitsByDate === "object" ? source.habitsByDate : {},
     preferences: source.preferences && typeof source.preferences === "object" ? source.preferences : {},
   };
 }
