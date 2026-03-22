@@ -74,6 +74,7 @@ document.getElementById("importButton").addEventListener("click", () => {
 
     const normalized = parsed.map(normalizeEvent);
     state.events = [...state.events, ...normalized];
+    recalculateRealizedPnl();
     persistEvents();
     jsonInput.value = "";
     renderCalendar();
@@ -146,6 +147,7 @@ function initializeDashboard() {
   }
 
   dashboardInitialized = true;
+  recalculateRealizedPnl();
   renderWeekdays();
   renderCalendar();
   renderSelectedDate();
@@ -245,7 +247,7 @@ function renderSelectedDate() {
           <div class="trade-stats">
             <span>Price: ${formatMoney(entry.price)}</span>
             <span>Value: ${formatMoney(entry.quoteAmount)}</span>
-            <span class="${getTradeCashFlow(entry) >= 0 ? "positive-text" : "negative-text"}">P/L Est.: ${formatSignedMoney(getTradeCashFlow(entry))}</span>
+            <span class="${getRealizedPnl(entry) >= 0 ? "positive-text" : "negative-text"}">Realized P/L: ${formatSignedMoney(getRealizedPnl(entry))}</span>
           </div>
           <div class="event-notes">${entry.notes ? escapeHtml(entry.notes) : "No exchange note."}</div>
         </article>
@@ -293,6 +295,7 @@ async function syncMexc() {
 
     const normalized = payload.activities.map(normalizeEvent).filter((entry) => entry.type === "trade");
     state.events = mergeEvents(state.events.filter((entry) => entry.type === "trade"), normalized);
+    recalculateRealizedPnl();
     persistEvents();
     renderCalendar();
     renderSelectedDate();
@@ -590,10 +593,12 @@ function normalizeEvent(entry) {
     side: String(entry.side || "").toLowerCase(),
     price: Number(entry.price || 0),
     quoteAmount: Number(entry.quoteAmount || 0),
+    baseAsset: String(entry.baseAsset || entry.asset || "").toUpperCase(),
     fee: Number(entry.fee || 0),
     feeAsset: String(entry.feeAsset || "").toUpperCase(),
     isMaker: Boolean(entry.isMaker),
     executedAt: String(entry.executedAt || entry.date || ""),
+    realizedPnl: Number(entry.realizedPnl || 0),
     notes: String(entry.notes || "").trim(),
   };
 }
@@ -615,6 +620,7 @@ function deleteActivity(id) {
     return;
   }
 
+  recalculateRealizedPnl();
   persistEvents();
   renderCalendar();
   renderSelectedDate();
@@ -651,22 +657,83 @@ function formatSignedMoney(amount) {
   return `${sign}${formatMoney(Math.abs(numeric))}`;
 }
 
-function getTradeCashFlow(entry) {
-  if (!entry.quoteAmount) {
-    return 0;
-  }
-
-  return entry.side === "sell" ? Number(entry.quoteAmount) : -Number(entry.quoteAmount);
-}
-
 function summarizeTrades(events) {
-  const totalCashFlow = events.reduce((sum, entry) => sum + getTradeCashFlow(entry), 0);
-  const pnlClass = totalCashFlow > 0 ? "positive" : totalCashFlow < 0 ? "negative" : "neutral";
+  const totalRealizedPnl = events.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
+  const pnlClass = totalRealizedPnl > 0 ? "positive" : totalRealizedPnl < 0 ? "negative" : "neutral";
   return {
-    label: "P/L Est.",
-    value: formatSignedMoney(totalCashFlow),
+    label: "Realized P/L",
+    value: formatSignedMoney(totalRealizedPnl),
     pnlClass,
   };
+}
+
+function getRealizedPnl(entry) {
+  return Number(entry.realizedPnl || 0);
+}
+
+function recalculateRealizedPnl() {
+  const fifoBySymbol = new Map();
+  const ordered = [...state.events].sort((left, right) => {
+    const leftTime = Date.parse(left.executedAt || `${left.date}T00:00:00Z`) || 0;
+    const rightTime = Date.parse(right.executedAt || `${right.date}T00:00:00Z`) || 0;
+    return leftTime - rightTime;
+  });
+
+  ordered.forEach((entry) => {
+    const symbolKey = String(entry.asset || "UNKNOWN").toUpperCase();
+    const baseAsset = String(entry.baseAsset || symbolKey).toUpperCase();
+    const feeAsset = String(entry.feeAsset || "").toUpperCase();
+    const quantity = Number(entry.amount || 0);
+    const quoteAmount = Number(entry.quoteAmount || 0);
+    const fee = Number(entry.fee || 0);
+
+    if (!fifoBySymbol.has(symbolKey)) {
+      fifoBySymbol.set(symbolKey, []);
+    }
+
+    const lots = fifoBySymbol.get(symbolKey);
+
+    if (entry.side === "buy") {
+      const acquiredQty = Math.max(0, quantity - (feeAsset === baseAsset ? fee : 0));
+      const totalCost = quoteAmount + (feeAsset !== baseAsset ? fee : 0);
+      if (acquiredQty > 0) {
+        lots.push({
+          quantity: acquiredQty,
+          unitCost: totalCost / acquiredQty,
+        });
+      }
+      entry.realizedPnl = 0;
+      return;
+    }
+
+    if (entry.side !== "sell") {
+      entry.realizedPnl = 0;
+      return;
+    }
+
+    let quantityToClose = quantity + (feeAsset === baseAsset ? fee : 0);
+    let costBasis = 0;
+    while (quantityToClose > 0 && lots.length > 0) {
+      const lot = lots[0];
+      const matchedQty = Math.min(quantityToClose, lot.quantity);
+      costBasis += matchedQty * lot.unitCost;
+      lot.quantity -= matchedQty;
+      quantityToClose -= matchedQty;
+      if (lot.quantity <= 1e-12) {
+        lots.shift();
+      }
+    }
+
+    if (quantityToClose > 1e-12) {
+      const fallbackUnitCost = quantity > 0 ? quoteAmount / quantity : 0;
+      costBasis += quantityToClose * fallbackUnitCost;
+    }
+
+    const proceeds = quoteAmount - (feeAsset !== baseAsset ? fee : 0);
+    entry.realizedPnl = proceeds - costBasis;
+  });
+
+  state.events = ordered;
 }
 
 function escapeHtml(text) {

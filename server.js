@@ -278,6 +278,7 @@ function mapTradeHistory(payload, symbol) {
     side: entry.isBuyer ? "buy" : "sell",
     price: Number(entry.price || 0),
     quoteAmount: Number(entry.quoteQty || 0),
+    baseAsset: String(symbol || ""),
     fee: Number(entry.commission || 0),
     feeAsset: String(entry.commissionAsset || ""),
     isMaker: Boolean(entry.isMaker),
