@@ -1,16 +1,21 @@
 :root {
-  --bg: #09111f;
-  --bg-accent: #132238;
-  --panel: rgba(10, 21, 36, 0.88);
-  --panel-strong: #10233b;
-  --line: rgba(165, 193, 224, 0.16);
+  --bg: #07101b;
+  --bg-accent: #102236;
+  --panel: rgba(11, 22, 37, 0.9);
+  --panel-strong: #132845;
+  --line: rgba(165, 193, 224, 0.12);
+  --line-strong: rgba(165, 193, 224, 0.24);
   --text: #f4f7fb;
   --muted: #9eb2ca;
   --gold: #f7b955;
   --mint: #44d7b6;
   --rose: #ff8a80;
   --sky: #7dc4ff;
-  --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+  --shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
+  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.18);
+  --radius-xl: 28px;
+  --radius-lg: 22px;
+  --radius-md: 16px;
 }
 
 * {
@@ -23,9 +28,9 @@ body {
   font-family: "Space Grotesk", sans-serif;
   color: var(--text);
   background:
-    radial-gradient(circle at top left, rgba(125, 196, 255, 0.18), transparent 28%),
-    radial-gradient(circle at top right, rgba(247, 185, 85, 0.16), transparent 30%),
-    linear-gradient(160deg, #050b14 0%, #09111f 45%, #0b1830 100%);
+    radial-gradient(circle at top left, rgba(125, 196, 255, 0.14), transparent 24%),
+    radial-gradient(circle at top right, rgba(247, 185, 85, 0.12), transparent 26%),
+    linear-gradient(180deg, #050a12 0%, #07101b 40%, #0a1830 100%);
 }
 
 button,
@@ -38,7 +43,7 @@ textarea {
 .app-shell {
   width: min(1380px, calc(100vw - 32px));
   margin: 0 auto;
-  padding: 28px 0 40px;
+  padding: 32px 0 44px;
 }
 
 .app-shell.is-hidden,
@@ -70,13 +75,15 @@ textarea {
 .hero {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
+  gap: 28px;
   align-items: end;
-  padding: 24px 28px;
-  margin-bottom: 22px;
+  padding: 30px 32px;
+  margin-bottom: 24px;
   border: 1px solid var(--line);
-  border-radius: 28px;
-  background: linear-gradient(135deg, rgba(16, 35, 59, 0.95), rgba(9, 17, 31, 0.88));
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(135deg, rgba(15, 33, 54, 0.96), rgba(9, 17, 31, 0.92)),
+    radial-gradient(circle at top right, rgba(247, 185, 85, 0.12), transparent 35%);
   box-shadow: var(--shadow);
 }
 
@@ -106,7 +113,7 @@ h1 {
 .muted {
   color: var(--muted);
   max-width: 720px;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 .hero-actions,
@@ -144,7 +151,7 @@ h1 {
 .dashboard {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(330px, 0.9fr);
-  gap: 22px;
+  gap: 24px;
 }
 
 .main-column {
@@ -155,12 +162,13 @@ h1 {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  gap: 18px;
 }
 
 .stat-card h2 {
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   font-size: clamp(1.5rem, 2vw, 2.3rem);
+  letter-spacing: -0.03em;
 }
 
 .sidebar {
@@ -169,10 +177,11 @@ h1 {
 }
 
 .card {
-  padding: 22px;
+  padding: 24px;
   border: 1px solid var(--line);
-  border-radius: 24px;
-  background: var(--panel);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(13, 24, 40, 0.96), rgba(10, 19, 32, 0.92));
   backdrop-filter: blur(16px);
   box-shadow: var(--shadow);
 }
@@ -181,12 +190,24 @@ h1 {
   min-height: 760px;
 }
 
+.stat-card,
+.nested-card,
+.market-panel,
+.chart-board,
+.event-item,
+.day-note-card,
+.analytics-item,
+.mini-chart-card {
+  box-shadow: var(--shadow-soft);
+}
+
 .chart-board {
   margin-top: 14px;
-  padding: 14px;
+  padding: 18px;
   border: 1px solid var(--line);
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.03);
+  background:
+    linear-gradient(180deg, rgba(8, 15, 26, 0.94), rgba(7, 14, 24, 0.98));
 }
 
 .nested-card {
@@ -196,8 +217,14 @@ h1 {
 .market-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   justify-content: flex-end;
+}
+
+.market-tabs .button {
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 0.88rem;
 }
 
 .market-layout {
@@ -208,10 +235,11 @@ h1 {
 }
 
 .market-panel {
-  padding: 14px;
+  padding: 18px;
   border: 1px solid var(--line);
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.03);
+  background:
+    linear-gradient(180deg, rgba(9, 18, 31, 0.98), rgba(8, 16, 28, 0.96));
 }
 
 .market-search-label {
@@ -226,6 +254,10 @@ h1 {
   margin-bottom: 12px;
 }
 
+.market-inline-actions .button {
+  flex: 1;
+}
+
 .market-list-head,
 .market-row {
   display: grid;
@@ -235,37 +267,50 @@ h1 {
 }
 
 .market-list-head {
-  padding: 0 10px 10px;
+  padding: 0 10px 12px;
   color: var(--muted);
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  border-bottom: 1px solid var(--line);
 }
 
 .market-list {
-  max-height: 520px;
+  max-height: 560px;
+  margin-top: 10px;
+  padding-right: 6px;
   overflow-y: auto;
   display: grid;
   gap: 8px;
 }
 
+.market-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.market-list::-webkit-scrollbar-thumb {
+  background: rgba(158, 178, 202, 0.18);
+  border-radius: 999px;
+}
+
 .market-row {
   padding: 12px 10px;
   border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
   cursor: pointer;
-  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 
 .market-row:hover {
   transform: translateY(-1px);
   border-color: rgba(125, 196, 255, 0.42);
+  box-shadow: var(--shadow-soft);
 }
 
 .market-row.is-active {
   border-color: rgba(247, 185, 85, 0.95);
-  background: rgba(247, 185, 85, 0.1);
+  background: linear-gradient(135deg, rgba(247, 185, 85, 0.12), rgba(247, 185, 85, 0.04));
 }
 
 .market-symbol {
@@ -275,6 +320,7 @@ h1 {
 
 .market-symbol strong {
   font-size: 0.95rem;
+  letter-spacing: -0.02em;
 }
 
 .market-symbol span {
@@ -289,10 +335,10 @@ h1 {
 }
 
 .market-workspace-grid {
-  margin-top: 18px;
+  margin-top: 20px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 18px;
 }
 
 .quick-symbols-head {
@@ -308,8 +354,8 @@ h1 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 .chart-board-meta {
@@ -321,6 +367,7 @@ h1 {
 
 .chart-meta-copy {
   margin: 6px 0 0;
+  font-size: 0.92rem;
 }
 
 .inline-check {
@@ -329,6 +376,10 @@ h1 {
   gap: 6px;
   color: var(--muted);
   font-size: 0.85rem;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .inline-check input {
@@ -374,14 +425,15 @@ h1 {
 
 .market-chart-canvas {
   width: 100%;
-  height: 360px;
+  height: 400px;
   display: block;
-  border-radius: 14px;
+  border-radius: 18px;
   background:
     linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    #07111d;
+    linear-gradient(180deg, #07111d, #091628);
   background-size: 100% 25%, 12.5% 100%, auto;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .chart-hover-info {
@@ -398,7 +450,7 @@ h1 {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .mini-chart-head {
@@ -427,7 +479,7 @@ h1 {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .analytics-item strong {
@@ -490,7 +542,7 @@ h1 {
   padding: 14px 12px;
   border-radius: 20px;
   border: 1px solid var(--line);
-  background: rgba(19, 34, 56, 0.65);
+  background: linear-gradient(180deg, rgba(19, 34, 56, 0.72), rgba(14, 25, 42, 0.82));
   cursor: pointer;
   transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
 }
@@ -621,6 +673,16 @@ h1 {
   padding: 12px 16px;
   border-radius: 14px;
   font-weight: 700;
+  transition: transform 140ms ease, filter 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.button:hover,
+.icon-button:hover,
+.delete-button:hover,
+.field-toggle:hover,
+.star-button:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
 }
 
 .button-primary {
@@ -653,6 +715,7 @@ h1 {
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.82rem;
   background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .activity-form,
@@ -715,7 +778,18 @@ textarea,
   border: 1px solid var(--line);
   border-radius: 14px;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.045);
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+.json-input:focus {
+  outline: none;
+  border-color: rgba(125, 196, 255, 0.38);
+  box-shadow: 0 0 0 4px rgba(125, 196, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 textarea {
@@ -730,7 +804,7 @@ textarea {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .chart-preview-wrap.is-hidden {
@@ -758,7 +832,7 @@ textarea {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.025);
   white-space: pre-wrap;
   line-height: 1.6;
 }
@@ -855,6 +929,10 @@ code {
     padding: 20px;
     align-items: start;
     flex-direction: column;
+  }
+
+  .market-tabs {
+    justify-content: flex-start;
   }
 
   .weekday-row,
