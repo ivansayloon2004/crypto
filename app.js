@@ -52,6 +52,7 @@ const state = {
     direction: "desc",
   },
   currentWindow: "overview",
+  currentOverviewSection: "summary",
   currentSidebarPane: "day",
   user: null,
   profileLoaded: false,
@@ -70,6 +71,10 @@ const overviewWindowTab = document.getElementById("overviewWindowTab");
 const marketsWindowTab = document.getElementById("marketsWindowTab");
 const overviewWindow = document.getElementById("overviewWindow");
 const marketsWindow = document.getElementById("marketsWindow");
+const overviewSectionTabSummary = document.getElementById("overviewSectionTabSummary");
+const overviewSectionTabReview = document.getElementById("overviewSectionTabReview");
+const overviewSectionTabJournal = document.getElementById("overviewSectionTabJournal");
+const overviewBlocks = document.querySelectorAll(".overview-block");
 const sidebar = document.getElementById("sidebar");
 const sidebarTabDay = document.getElementById("sidebarTabDay");
 const sidebarTabNotes = document.getElementById("sidebarTabNotes");
@@ -253,6 +258,9 @@ bootstrap();
 
 overviewWindowTab?.addEventListener("click", () => switchMainWindow("overview"));
 marketsWindowTab?.addEventListener("click", () => switchMainWindow("markets"));
+overviewSectionTabSummary?.addEventListener("click", () => switchOverviewSection("summary"));
+overviewSectionTabReview?.addEventListener("click", () => switchOverviewSection("review"));
+overviewSectionTabJournal?.addEventListener("click", () => switchOverviewSection("journal"));
 sidebarTabDay?.addEventListener("click", () => switchSidebarPane("day"));
 sidebarTabNotes?.addEventListener("click", () => switchSidebarPane("notes"));
 sidebarTabMexc?.addEventListener("click", () => switchSidebarPane("mexc"));
@@ -576,6 +584,7 @@ function initializeDashboard() {
   loadMarketChart();
   fetchLivePhpRate(false);
   switchMainWindow(state.currentWindow || "overview");
+  switchOverviewSection(state.currentOverviewSection || "summary");
   switchSidebarPane(state.currentSidebarPane || "day");
   if (!state.goals.onboardingCompleted) {
     openOnboarding();
@@ -590,6 +599,30 @@ function switchMainWindow(view) {
   overviewWindowTab.className = isOverview ? "button button-primary" : "button button-ghost";
   marketsWindowTab.className = isOverview ? "button button-ghost" : "button button-primary";
   updateMobileDockState();
+  scheduleProfileSave();
+}
+
+function switchOverviewSection(view) {
+  state.currentOverviewSection = view;
+  const isSummary = view === "summary";
+  const isReview = view === "review";
+  const isJournal = view === "journal";
+
+  overviewSectionTabSummary?.classList.toggle("button-primary", isSummary);
+  overviewSectionTabSummary?.classList.toggle("button-ghost", !isSummary);
+  overviewSectionTabReview?.classList.toggle("button-primary", isReview);
+  overviewSectionTabReview?.classList.toggle("button-ghost", !isReview);
+  overviewSectionTabJournal?.classList.toggle("button-primary", isJournal);
+  overviewSectionTabJournal?.classList.toggle("button-ghost", !isJournal);
+
+  overviewBlocks.forEach((block) => {
+    const shouldShow =
+      (block.classList.contains("overview-block-summary") && isSummary) ||
+      (block.classList.contains("overview-block-review") && isReview) ||
+      (block.classList.contains("overview-block-journal") && isJournal);
+    block.classList.toggle("is-active", shouldShow);
+  });
+
   scheduleProfileSave();
 }
 
@@ -979,6 +1012,9 @@ function mergeCloudProfileIntoState(profile) {
   if (preferences.currentWindow === "overview" || preferences.currentWindow === "markets") {
     state.currentWindow = preferences.currentWindow;
   }
+  if (["summary", "review", "journal"].includes(preferences.currentOverviewSection)) {
+    state.currentOverviewSection = preferences.currentOverviewSection;
+  }
   if (["day", "notes", "mexc", "ai", "import"].includes(preferences.currentSidebarPane)) {
     state.currentSidebarPane = preferences.currentSidebarPane;
   }
@@ -1029,6 +1065,7 @@ async function saveProfileToCloud() {
     habitsByDate: state.habitsByDate,
     preferences: {
       currentWindow: state.currentWindow,
+      currentOverviewSection: state.currentOverviewSection,
       currentSidebarPane: state.currentSidebarPane,
       marketType: state.marketType,
       marketView: state.marketView,

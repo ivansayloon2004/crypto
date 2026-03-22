@@ -111,7 +111,13 @@
         </div>
 
         <section id="overviewWindow" class="window-pane is-active">
-          <section class="card">
+          <div class="window-tabs overview-section-tabs">
+            <button id="overviewSectionTabSummary" class="button button-primary" type="button">Summary</button>
+            <button id="overviewSectionTabReview" class="button button-ghost" type="button">Review</button>
+            <button id="overviewSectionTabJournal" class="button button-ghost" type="button">Journal</button>
+          </div>
+
+          <section class="card overview-block overview-block-summary is-active">
             <div class="section-head">
               <div>
                 <p class="section-label">Filters</p>
@@ -163,7 +169,7 @@
             </div>
           </section>
 
-          <section class="stats-grid" id="statsGrid">
+          <section class="stats-grid overview-block overview-block-summary is-active" id="statsGrid">
             <article class="card stat-card">
               <p class="section-label">Realized P/L (PHP)</p>
               <h2 id="statRealizedPnl">₱0.00</h2>
@@ -195,7 +201,7 @@
               <p id="statMonthPnlSub" class="muted">Realized P/L (PHP) for visible month</p>
             </article>
           </section>
-          <section class="card portfolio-workspace">
+          <section class="card portfolio-workspace overview-block overview-block-summary is-active">
             <div class="section-head">
               <div>
                 <p class="section-label">Portfolio</p>
@@ -207,7 +213,7 @@
             <div id="portfolioHoldingsList" class="event-list empty-state">No holdings detected yet.</div>
           </section>
 
-          <section class="card card-calendar">
+          <section class="card card-calendar overview-block overview-block-summary is-active">
             <div class="calendar-header">
               <div>
                 <p class="section-label">Monthly View</p>
@@ -224,7 +230,7 @@
             <div class="weekday-row" id="weekdayRow"></div>
             <div id="calendarGrid" class="calendar-grid"></div>
           </section>
-          <section class="card">
+          <section class="card overview-block overview-block-review">
             <div class="section-head">
               <div>
                 <p class="section-label">Performance</p>
@@ -246,7 +252,7 @@
               </div>
             </div>
           </section>
-          <section class="card">
+          <section class="card overview-block overview-block-review">
             <div class="section-head">
               <div>
                 <p class="section-label">Risk</p>
@@ -255,7 +261,7 @@
             </div>
             <div id="riskMetricsGrid" class="analytics-grid"></div>
           </section>
-          <section class="card">
+          <section class="card overview-block overview-block-journal">
             <div class="section-head">
               <div>
                 <p class="section-label">Goals</p>
@@ -298,7 +304,7 @@
             <div id="goalsStatus" class="muted">Set your monthly target, risk limits, and habit tags.</div>
             <div id="habitSummary" class="event-list empty-state">No habit tags saved yet.</div>
           </section>
-          <section class="card">
+          <section class="card overview-block overview-block-review">
             <div class="section-head">
               <div>
                 <p class="section-label">Review</p>
@@ -320,7 +326,7 @@
               </div>
             </div>
           </section>
-          <section class="card">
+          <section class="card overview-block overview-block-review">
             <div class="section-head">
               <div>
                 <p class="section-label">Insights</p>
@@ -329,7 +335,7 @@
             </div>
             <div id="insightsGrid" class="analytics-grid"></div>
           </section>
-          <section class="card">
+          <section class="card overview-block overview-block-review">
             <div class="section-head">
               <div>
                 <p class="section-label">Strategy Lab</p>
@@ -338,7 +344,7 @@
             </div>
             <div id="strategyLabTable" class="table-shell"></div>
           </section>
-          <section class="card">
+          <section class="card overview-block overview-block-review">
             <div class="section-head">
               <div>
                 <p class="section-label">Red Flags</p>
@@ -347,7 +353,7 @@
             </div>
             <div id="redFlagGrid" class="analytics-grid"></div>
           </section>
-          <section class="card">
+          <section class="card overview-block overview-block-journal">
             <div class="section-head">
               <div>
                 <p class="section-label">Symbols</p>
@@ -356,7 +362,7 @@
             </div>
             <div id="symbolPerformanceTable" class="table-shell"></div>
           </section>
-          <section class="card">
+          <section class="card overview-block overview-block-journal">
             <div class="section-head">
               <div>
                 <p class="section-label">Trades</p>

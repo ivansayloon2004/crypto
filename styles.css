@@ -176,6 +176,11 @@ h1 {
   gap: 12px;
 }
 
+.section-head {
+  align-items: center;
+  justify-content: space-between;
+}
+
 .hero-actions {
   align-items: center;
   flex-wrap: wrap;
@@ -209,7 +214,7 @@ h1 {
 
 .main-column {
   display: grid;
-  gap: 22px;
+  gap: 18px;
   min-height: calc(100vh - 180px);
 }
 
@@ -233,6 +238,26 @@ h1 {
   display: grid;
 }
 
+.overview-section-tabs {
+  position: sticky;
+  top: 16px;
+  z-index: 16;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(7, 16, 27, 0.84);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-soft);
+}
+
+.overview-block {
+  display: none;
+}
+
+.overview-block.is-active {
+  display: grid;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -247,7 +272,7 @@ h1 {
 
 .sidebar {
   display: grid;
-  gap: 22px;
+  gap: 16px;
   position: sticky;
   top: 24px;
   max-height: calc(100vh - 40px);
@@ -269,7 +294,7 @@ h1 {
 }
 
 .card {
-  padding: 24px;
+  padding: 20px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background:
@@ -668,6 +693,18 @@ h1 {
 .table-shell {
   display: grid;
   gap: 10px;
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.table-shell::-webkit-scrollbar {
+  width: 10px;
+}
+
+.table-shell::-webkit-scrollbar-thumb {
+  background: rgba(158, 178, 202, 0.18);
+  border-radius: 999px;
 }
 
 .table-head,
@@ -732,6 +769,36 @@ h1 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+#portfolioHoldingsList,
+#selectedDateEvents,
+#tradeStoryPanel,
+#tradeReplayPanel,
+#alertsList,
+#habitSummary {
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+#portfolioHoldingsList::-webkit-scrollbar,
+#selectedDateEvents::-webkit-scrollbar,
+#tradeStoryPanel::-webkit-scrollbar,
+#tradeReplayPanel::-webkit-scrollbar,
+#alertsList::-webkit-scrollbar,
+#habitSummary::-webkit-scrollbar {
+  width: 10px;
+}
+
+#portfolioHoldingsList::-webkit-scrollbar-thumb,
+#selectedDateEvents::-webkit-scrollbar-thumb,
+#tradeStoryPanel::-webkit-scrollbar-thumb,
+#tradeReplayPanel::-webkit-scrollbar-thumb,
+#alertsList::-webkit-scrollbar-thumb,
+#habitSummary::-webkit-scrollbar-thumb {
+  background: rgba(158, 178, 202, 0.18);
+  border-radius: 999px;
 }
 
 .analytics-item {
