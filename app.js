@@ -20,6 +20,7 @@ const state = {
   notesByDate: loadNotes(),
   pricesBySymbol: {},
   openPositions: [],
+  markets: [],
 };
 
 const monthLabel = document.getElementById("monthLabel");
@@ -38,6 +39,9 @@ const loadChartButton = document.getElementById("loadChartButton");
 const useMexcSymbolsButton = document.getElementById("useMexcSymbolsButton");
 const toggleLiveChartButton = document.getElementById("toggleLiveChartButton");
 const marketSymbolChips = document.getElementById("marketSymbolChips");
+const marketSearchInput = document.getElementById("marketSearchInput");
+const marketListStatus = document.getElementById("marketListStatus");
+const marketList = document.getElementById("marketList");
 const marketChartStatus = document.getElementById("marketChartStatus");
 const marketChartTitle = document.getElementById("marketChartTitle");
 const marketChartPrice = document.getElementById("marketChartPrice");
@@ -169,6 +173,9 @@ if (useMexcSymbolsButton) {
 if (toggleLiveChartButton) {
   toggleLiveChartButton.addEventListener("click", toggleLiveChart);
 }
+if (marketSearchInput) {
+  marketSearchInput.addEventListener("input", renderMarketList);
+}
 chartImageInput.addEventListener("change", handleChartPreview);
 fieldToggles.forEach((button) => {
   button.addEventListener("click", () => toggleSecretField(button));
@@ -179,6 +186,7 @@ mexcForm.addEventListener("submit", (event) => {
   const config = readMexcForm();
   persistMexcConfig(config);
   renderMarketSymbolChips();
+  renderMarketList();
   syncStatus.textContent = config.apiKey ? (config.rememberKeys ? "MEXC keys remembered on this device." : "MEXC keys saved for this browser session only.") : "Saved with empty keys. Add keys before syncing.";
 });
 
@@ -219,6 +227,7 @@ function initializeDashboard() {
   hydrateDayNoteForm();
   renderMarketSymbolChips();
   updateLiveChartUi();
+  loadMarketCatalog();
   loadMarketChart();
 }
 
@@ -838,6 +847,98 @@ function renderMarketSymbolChips() {
 
       marketSymbolInput.value = symbol;
       renderMarketSymbolChips();
+      renderMarketList();
+      loadMarketChart();
+    });
+  });
+}
+
+async function loadMarketCatalog() {
+  if (!marketList || !marketListStatus) {
+    return;
+  }
+
+  marketListStatus.textContent = "Loading MEXC symbols...";
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/mexc/markets`, {
+      credentials: "same-origin",
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not load markets");
+    }
+
+    state.markets = Array.isArray(payload.markets) ? payload.markets : [];
+    renderMarketList();
+    marketListStatus.textContent = `Loaded ${state.markets.length} MEXC symbols.`;
+  } catch (error) {
+    marketListStatus.textContent = `Market list unavailable: ${error.message}`;
+    if (marketList) {
+      marketList.innerHTML = "";
+    }
+  }
+}
+
+function renderMarketList() {
+  if (!marketList) {
+    return;
+  }
+
+  const activeSymbol = String(marketSymbolInput?.value || "").trim().toUpperCase();
+  const query = String(marketSearchInput?.value || "").trim().toUpperCase();
+  const source = Array.isArray(state.markets) ? state.markets : [];
+  const filtered = source
+    .filter((entry) => {
+      if (!query) {
+        return true;
+      }
+
+      return (
+        String(entry.symbol || "").includes(query) ||
+        String(entry.baseAsset || "").includes(query) ||
+        String(entry.quoteAsset || "").includes(query)
+      );
+    })
+    .slice(0, 120);
+
+  if (filtered.length === 0) {
+    marketList.innerHTML = `<div class="empty-state">No symbols matched your search.</div>`;
+    return;
+  }
+
+  marketList.innerHTML = filtered
+    .map((entry) => {
+      const change = Number(entry.priceChangePercent || 0);
+      const changeClass = change > 0 ? "positive-text" : change < 0 ? "negative-text" : "muted";
+      return `
+        <button
+          type="button"
+          class="market-row ${entry.symbol === activeSymbol ? "is-active" : ""}"
+          data-symbol="${escapeHtml(entry.symbol)}"
+        >
+          <div class="market-symbol">
+            <strong>${escapeHtml(entry.symbol)}</strong>
+            <span>${escapeHtml(entry.baseAsset)}/${escapeHtml(entry.quoteAsset)}</span>
+          </div>
+          <div class="market-metric">${formatCompactPrice(entry.lastPrice)}</div>
+          <div class="market-metric ${changeClass}">${formatPercent(entry.priceChangePercent)}</div>
+          <div class="market-metric">${formatCompactVolume(entry.quoteVolume)}</div>
+        </button>
+      `;
+    })
+    .join("");
+
+  marketList.querySelectorAll(".market-row").forEach((button) => {
+    button.addEventListener("click", () => {
+      const symbol = String(button.dataset.symbol || "").trim().toUpperCase();
+      if (!symbol) {
+        return;
+      }
+
+      marketSymbolInput.value = symbol;
+      renderMarketSymbolChips();
+      renderMarketList();
       loadMarketChart();
     });
   });
@@ -966,6 +1067,7 @@ function updateLiveChartUi() {
   }
 
   renderMarketSymbolChips();
+  renderMarketList();
 }
 
 function syncMarketChartTimer() {
@@ -1275,6 +1377,37 @@ function formatSignedMoney(amount) {
   const numeric = Number(amount || 0);
   const sign = numeric > 0 ? "+" : numeric < 0 ? "-" : "";
   return `${sign}${formatMoney(Math.abs(numeric))}`;
+}
+
+function formatPercent(value) {
+  const numeric = Number(value || 0);
+  const sign = numeric > 0 ? "+" : "";
+  return `${sign}${numeric.toFixed(2)}%`;
+}
+
+function formatCompactPrice(value) {
+  const numeric = Number(value || 0);
+  if (numeric >= 1000) {
+    return numeric.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  }
+  if (numeric >= 1) {
+    return numeric.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  }
+  return numeric.toLocaleString("en-US", { maximumFractionDigits: 6 });
+}
+
+function formatCompactVolume(value) {
+  const numeric = Number(value || 0);
+  if (numeric >= 1_000_000_000) {
+    return `${(numeric / 1_000_000_000).toFixed(2)}B`;
+  }
+  if (numeric >= 1_000_000) {
+    return `${(numeric / 1_000_000).toFixed(2)}M`;
+  }
+  if (numeric >= 1_000) {
+    return `${(numeric / 1_000).toFixed(2)}K`;
+  }
+  return numeric.toFixed(2);
 }
 
 function summarizeTrades(events) {

@@ -52,6 +52,10 @@ const server = http.createServer(async (req, res) => {
     return withAuthenticatedUser(req, res, () => handleMexcKlines(requestUrl, res));
   }
 
+  if (req.method === "GET" && requestUrl.pathname === "/api/mexc/markets") {
+    return withAuthenticatedUser(req, res, () => handleMexcMarkets(res));
+  }
+
   if (req.method === "POST" && requestUrl.pathname === "/api/ai/chart-analysis") {
     return withAuthenticatedUser(req, res, () => handleChartAnalysis(req, res));
   }
@@ -215,6 +219,56 @@ async function handleMexcKlines(requestUrl, res) {
       apiBase: "https://api.mexc.com",
     });
     return sendJson(res, 200, { symbol, interval, klines: payload });
+  } catch (error) {
+    return sendJson(res, 500, { error: error.message });
+  }
+}
+
+async function handleMexcMarkets(res) {
+  try {
+    const [exchangeInfo, tickers] = await Promise.all([
+      publicGet({
+        endpoint: "/api/v3/exchangeInfo",
+        apiBase: "https://api.mexc.com",
+      }),
+      publicGet({
+        endpoint: "/api/v3/ticker/24hr",
+        apiBase: "https://api.mexc.com",
+      }),
+    ]);
+
+    const activeSymbols = new Map(
+      (Array.isArray(exchangeInfo?.symbols) ? exchangeInfo.symbols : [])
+        .filter((entry) => entry?.status === "1" || entry?.status === 1 || entry?.status === "ENABLED")
+        .map((entry) => [String(entry.symbol || "").toUpperCase(), entry])
+    );
+
+    const markets = (Array.isArray(tickers) ? tickers : [])
+      .map((entry) => {
+        const symbol = String(entry.symbol || "").toUpperCase();
+        const details = activeSymbols.get(symbol);
+        if (!details) {
+          return null;
+        }
+
+        return {
+          symbol,
+          baseAsset: String(details.baseAsset || ""),
+          quoteAsset: String(details.quoteAsset || ""),
+          lastPrice: Number(entry.lastPrice || 0),
+          priceChangePercent: Number(entry.priceChangePercent || 0) * 100,
+          volume: Number(entry.volume || 0),
+          quoteVolume: Number(entry.quoteVolume || 0),
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => {
+        const leftVolume = Number(left.quoteVolume || 0);
+        const rightVolume = Number(right.quoteVolume || 0);
+        return rightVolume - leftVolume;
+      });
+
+    return sendJson(res, 200, { markets });
   } catch (error) {
     return sendJson(res, 500, { error: error.message });
   }

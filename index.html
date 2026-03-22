@@ -136,15 +136,31 @@
           <p id="marketChartStatus" class="muted">
             Load a symbol to view MEXC candlesticks directly in the app.
           </p>
-          <div class="chart-board">
-            <div class="chart-board-head">
-              <span id="marketChartTitle">BTCUSDT 4h</span>
-              <div class="chart-board-meta">
-                <span id="marketChartLiveBadge" class="pill pill-live">Live</span>
-                <span id="marketChartPrice" class="pill">Last: --</span>
+          <div class="market-layout">
+            <div class="market-panel">
+              <label class="market-search-label">
+                Search Pair
+                <input id="marketSearchInput" type="text" placeholder="Search BTC, ETH, SOL..." />
+              </label>
+              <div class="market-list-head">
+                <span>Trading Pair</span>
+                <span>Last Price</span>
+                <span>Change</span>
+                <span>Volume</span>
               </div>
+              <div id="marketListStatus" class="muted">Loading MEXC markets...</div>
+              <div id="marketList" class="market-list"></div>
             </div>
-            <canvas id="marketChartCanvas" class="market-chart-canvas" width="980" height="360"></canvas>
+            <div class="chart-board">
+              <div class="chart-board-head">
+                <span id="marketChartTitle">BTCUSDT 4h</span>
+                <div class="chart-board-meta">
+                  <span id="marketChartLiveBadge" class="pill pill-live">Live</span>
+                  <span id="marketChartPrice" class="pill">Last: --</span>
+                </div>
+              </div>
+              <canvas id="marketChartCanvas" class="market-chart-canvas" width="980" height="360"></canvas>
+            </div>
           </div>
         </section>
       </section>

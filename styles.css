@@ -189,6 +189,90 @@ h1 {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.market-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.market-panel {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.market-search-label {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.market-list-head,
+.market-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(88px, 0.9fr) minmax(72px, 0.7fr) minmax(72px, 0.7fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.market-list-head {
+  padding: 0 10px 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.market-list {
+  max-height: 520px;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+}
+
+.market-row {
+  padding: 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.market-row:hover {
+  transform: translateY(-1px);
+  border-color: rgba(125, 196, 255, 0.42);
+}
+
+.market-row.is-active {
+  border-color: rgba(247, 185, 85, 0.95);
+  background: rgba(247, 185, 85, 0.1);
+}
+
+.market-symbol {
+  display: grid;
+  gap: 4px;
+}
+
+.market-symbol strong {
+  font-size: 0.95rem;
+}
+
+.market-symbol span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.market-metric {
+  text-align: right;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.84rem;
+}
+
 .quick-symbols-head {
   margin: 18px 0 10px;
 }
@@ -633,6 +717,10 @@ code {
   .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .market-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 760px) {
@@ -674,5 +762,10 @@ code {
   .chart-board-meta {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .market-list-head,
+  .market-row {
+    grid-template-columns: minmax(0, 1.6fr) minmax(76px, 0.9fr) minmax(64px, 0.7fr) minmax(64px, 0.7fr);
   }
 }
