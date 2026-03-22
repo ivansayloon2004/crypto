@@ -225,9 +225,12 @@ function renderSelectedDate() {
     .sort((left, right) => (left.executedAt || "").localeCompare(right.executedAt || ""))
     .map((entry) => `
       <article class="event-item ${entry.type}">
-        <div class="event-meta">
-          <span class="event-type">${entry.side ? escapeHtml(entry.side) : "trade"}</span>
-          <span>${escapeHtml(entry.asset)}</span>
+        <div class="event-header-row">
+          <div class="event-meta">
+            <span class="event-type">${entry.side ? escapeHtml(entry.side) : "trade"}</span>
+            <span>${escapeHtml(entry.asset)}</span>
+          </div>
+          <button class="delete-button" data-id="${escapeHtml(entry.id)}" type="button">Delete</button>
         </div>
         <h3>${formatAmount(entry.amount)} ${escapeHtml(entry.asset)}</h3>
         <div class="trade-stats">
@@ -239,6 +242,12 @@ function renderSelectedDate() {
       </article>
     `)
     .join("");
+
+  selectedDateEvents.querySelectorAll(".delete-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      deleteActivity(button.dataset.id);
+    });
+  });
 }
 
 async function syncMexc() {
@@ -560,6 +569,20 @@ function mergeEvents(existing, incoming) {
   const byId = new Map(existing.map((entry) => [entry.id, entry]));
   incoming.forEach((entry) => byId.set(entry.id, entry));
   return [...byId.values()].sort((left, right) => left.date.localeCompare(right.date));
+}
+
+function deleteActivity(id) {
+  const beforeCount = state.events.length;
+  state.events = state.events.filter((entry) => entry.id !== id);
+  if (state.events.length === beforeCount) {
+    return;
+  }
+
+  persistEvents();
+  renderCalendar();
+  renderSelectedDate();
+  activityForm.elements.date.value = state.selectedDate;
+  syncStatus.textContent = "Trade deleted from your calendar.";
 }
 
 function formatDateKey(date) {
