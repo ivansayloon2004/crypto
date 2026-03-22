@@ -72,17 +72,22 @@ async function handleMexcActivity(req, res) {
       signedGet({ endpoint: "/api/v3/account", params: {}, apiKey, apiSecret, apiBase }),
       publicGet({ endpoint: "/api/v3/exchangeInfo", apiBase }),
     ]);
+    const candidateSymbols = (symbols.length > 0 ? symbols : getCandidateTradeSymbols(account, exchangeInfo)).slice(0, 20);
     const tradeActivity = await fetchTradeActivity({
       apiKey,
       apiSecret,
       apiBase,
       account,
       exchangeInfo,
-      symbols,
+      symbols: candidateSymbols,
       timeRange,
     });
+    const prices = await fetchTickerPrices({
+      apiBase,
+      symbols: candidateSymbols,
+    });
 
-    return sendJson(res, 200, { activities: tradeActivity });
+    return sendJson(res, 200, { activities: tradeActivity, prices });
   } catch (error) {
     return sendJson(res, 500, { error: error.message });
   }
@@ -229,6 +234,23 @@ async function fetchTradeActivity({ apiKey, apiSecret, apiBase, account, exchang
   );
 
   return tradeResponses.flatMap((payload, index) => mapTradeHistory(payload, candidateSymbols[index]));
+}
+
+async function fetchTickerPrices({ apiBase, symbols }) {
+  const uniqueSymbols = [...new Set((symbols || []).filter(Boolean))];
+  if (uniqueSymbols.length === 0) {
+    return {};
+  }
+
+  const results = await Promise.all(
+    uniqueSymbols.map((symbol) =>
+      publicGet({ endpoint: `/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`, apiBase })
+        .then((payload) => [symbol, Number(payload.price || 0)])
+        .catch(() => [symbol, 0])
+    )
+  );
+
+  return Object.fromEntries(results);
 }
 
 function getCandidateTradeSymbols(account, exchangeInfo) {

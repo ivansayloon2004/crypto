@@ -17,6 +17,8 @@ const state = {
   selectedDate: formatDateKey(new Date()),
   events: loadEvents().filter((entry) => entry.type === "trade"),
   notesByDate: loadNotes(),
+  pricesBySymbol: {},
+  openPositions: [],
 };
 
 const monthLabel = document.getElementById("monthLabel");
@@ -35,6 +37,8 @@ const appShell = document.getElementById("appShell");
 const loginStatus = document.getElementById("loginStatus");
 const googleButton = document.getElementById("googleButton");
 const userEmail = document.getElementById("userEmail");
+const statUnrealizedPnl = document.getElementById("statUnrealizedPnl");
+const statUnrealizedPnlSub = document.getElementById("statUnrealizedPnlSub");
 const statRealizedPnl = document.getElementById("statRealizedPnl");
 const statRealizedPnlSub = document.getElementById("statRealizedPnlSub");
 const statTradeCount = document.getElementById("statTradeCount");
@@ -47,6 +51,7 @@ const statWorstDay = document.getElementById("statWorstDay");
 const statWorstDaySub = document.getElementById("statWorstDaySub");
 const statMonthPnl = document.getElementById("statMonthPnl");
 const statMonthPnlSub = document.getElementById("statMonthPnlSub");
+const openPositionsList = document.getElementById("openPositionsList");
 let dashboardInitialized = false;
 
 bootstrap();
@@ -175,6 +180,7 @@ function initializeDashboard() {
 function renderStats() {
   const events = [...state.events];
   const realizedTotal = events.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
+  const unrealizedTotal = state.openPositions.reduce((sum, entry) => sum + entry.unrealizedPnl, 0);
   const realizedTrades = events.filter((entry) => entry.side === "sell");
   const winners = realizedTrades.filter((entry) => getRealizedPnl(entry) > 0);
   const visibleMonthKey = `${state.currentMonth.getFullYear()}-${String(state.currentMonth.getMonth() + 1).padStart(2, "0")}`;
@@ -184,6 +190,10 @@ function renderStats() {
   const bestDay = dayTotals.length > 0 ? dayTotals.reduce((best, entry) => (entry.pnl > best.pnl ? entry : best)) : null;
   const worstDay = dayTotals.length > 0 ? dayTotals.reduce((worst, entry) => (entry.pnl < worst.pnl ? entry : worst)) : null;
   const winRate = realizedTrades.length > 0 ? (winners.length / realizedTrades.length) * 100 : 0;
+
+  statUnrealizedPnl.textContent = formatSignedMoney(unrealizedTotal);
+  statUnrealizedPnl.className = unrealizedTotal > 0 ? "positive-text" : unrealizedTotal < 0 ? "negative-text" : "";
+  statUnrealizedPnlSub.textContent = state.openPositions.length > 0 ? `${state.openPositions.length} open position${state.openPositions.length === 1 ? "" : "s"}` : "Needs fresh market prices";
 
   statRealizedPnl.textContent = formatSignedMoney(realizedTotal);
   statRealizedPnl.className = realizedTotal > 0 ? "positive-text" : realizedTotal < 0 ? "negative-text" : "";
@@ -204,6 +214,7 @@ function renderStats() {
   statMonthPnl.textContent = formatSignedMoney(monthPnl);
   statMonthPnl.className = monthPnl > 0 ? "positive-text" : monthPnl < 0 ? "negative-text" : "";
   statMonthPnlSub.textContent = `${monthEvents.length} trade${monthEvents.length === 1 ? "" : "s"} in ${new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(state.currentMonth)}`;
+  renderOpenPositions();
 }
 
 function renderCalendar() {
@@ -347,6 +358,7 @@ async function syncMexc() {
 
     const normalized = payload.activities.map(normalizeEvent).filter((entry) => entry.type === "trade");
     state.events = mergeEvents(state.events.filter((entry) => entry.type === "trade"), normalized);
+    state.pricesBySymbol = payload.prices || {};
     recalculateRealizedPnl();
     persistEvents();
     renderStats();
@@ -742,6 +754,34 @@ function formatShortDate(dateKey) {
   }).format(parsed);
 }
 
+function renderOpenPositions() {
+  if (state.openPositions.length === 0) {
+    openPositionsList.className = "event-list empty-state";
+    openPositionsList.textContent = "No open positions detected from synced trade history.";
+    return;
+  }
+
+  openPositionsList.className = "event-list";
+  openPositionsList.innerHTML = state.openPositions
+    .sort((left, right) => Math.abs(right.unrealizedPnl) - Math.abs(left.unrealizedPnl))
+    .map((position) => `
+      <article class="event-item">
+        <div class="event-meta">
+          <span class="event-type">open</span>
+          <span>${escapeHtml(position.symbol)}</span>
+        </div>
+        <h3>${formatAmount(position.quantity)} ${escapeHtml(position.symbol)}</h3>
+        <div class="trade-stats">
+          <span>Avg Cost: ${formatMoney(position.averageCost)}</span>
+          <span>Last Price: ${position.marketPrice > 0 ? formatMoney(position.marketPrice) : "N/A"}</span>
+          <span>Value: ${position.marketPrice > 0 ? formatMoney(position.marketValue) : "N/A"}</span>
+          <span class="${position.unrealizedPnl >= 0 ? "positive-text" : "negative-text"}">Unrealized P/L: ${formatSignedMoney(position.unrealizedPnl)}</span>
+        </div>
+      </article>
+    `)
+    .join("");
+}
+
 function recalculateRealizedPnl() {
   const fifoBySymbol = new Map();
   const ordered = [...state.events].sort((left, right) => {
@@ -805,6 +845,32 @@ function recalculateRealizedPnl() {
   });
 
   state.events = ordered;
+  state.openPositions = [...fifoBySymbol.entries()]
+    .map(([symbol, lots]) => buildOpenPosition(symbol, lots, state.pricesBySymbol[symbol]))
+    .filter(Boolean);
+}
+
+function buildOpenPosition(symbol, lots, currentPrice) {
+  const quantity = lots.reduce((sum, lot) => sum + lot.quantity, 0);
+  if (quantity <= 1e-12) {
+    return null;
+  }
+
+  const totalCost = lots.reduce((sum, lot) => sum + lot.quantity * lot.unitCost, 0);
+  const averageCost = quantity > 0 ? totalCost / quantity : 0;
+  const marketPrice = Number(currentPrice || 0);
+  const marketValue = quantity * marketPrice;
+  const unrealizedPnl = marketPrice > 0 ? marketValue - totalCost : 0;
+
+  return {
+    symbol,
+    quantity,
+    averageCost,
+    marketPrice,
+    marketValue,
+    totalCost,
+    unrealizedPnl,
+  };
 }
 
 function escapeHtml(text) {
