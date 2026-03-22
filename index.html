@@ -166,7 +166,7 @@
           <section class="stats-grid" id="statsGrid">
             <article class="card stat-card">
               <p class="section-label">Realized P/L</p>
-              <h2 id="statRealizedPnl">0.00</h2>
+              <h2 id="statRealizedPnl">₱0.00</h2>
               <p id="statRealizedPnlSub" class="muted">Across all synced trades</p>
             </article>
             <article class="card stat-card">
@@ -191,7 +191,7 @@
             </article>
             <article class="card stat-card">
               <p class="section-label">This Month</p>
-              <h2 id="statMonthPnl">0.00</h2>
+              <h2 id="statMonthPnl">₱0.00</h2>
               <p id="statMonthPnlSub" class="muted">Realized P/L for visible month</p>
             </article>
           </section>
@@ -674,6 +674,17 @@
                 <input type="date" name="endDate" />
               </label>
             </div>
+            <div class="split-fields">
+              <label>
+                Display Currency
+                <input type="text" name="fiatCurrency" value="PHP" readonly />
+              </label>
+              <label>
+                PHP per USDT
+                <input type="number" name="usdtToPhpRate" value="56" min="1" step="0.01" />
+              </label>
+            </div>
+            <p class="muted">All prices, P/L, and totals will be converted to pesos using this rate.</p>
             <label class="checkbox-row">
               <input type="checkbox" name="rememberKeys" />
               <span>Remember keys on this device for later</span>

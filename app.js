@@ -10,6 +10,8 @@ const GOALS_STORAGE_KEY = "crypto-calendar-goals-v1";
 const HABITS_STORAGE_KEY = "crypto-calendar-habits-v1";
 const API_BASE_URL = window.location.origin;
 const MEXC_MARKET_WS_URL = "wss://wbs-api.mexc.com/ws";
+const DEFAULT_FIAT_CURRENCY = "PHP";
+const DEFAULT_USDT_TO_PHP_RATE = 56;
 const LEGACY_DEMO_NOTES = new Set([
   "Funding wallet top-up",
   "Spot buy during retrace",
@@ -59,6 +61,8 @@ const state = {
   chartVisibleSeries: [],
   calendarHeatmapMode: false,
   activeDrawerSymbol: "",
+  fiatCurrency: DEFAULT_FIAT_CURRENCY,
+  usdtToPhpRate: DEFAULT_USDT_TO_PHP_RATE,
 };
 
 const monthLabel = document.getElementById("monthLabel");
@@ -453,9 +457,20 @@ mexcForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const config = readMexcForm();
   persistMexcConfig(config);
+  applyCurrencyPreferences(config);
   renderMarketSymbolChips();
   renderMarketList();
-  syncStatus.textContent = config.apiKey ? (config.rememberKeys ? "MEXC keys remembered on this device." : "MEXC keys saved for this browser session only.") : "Saved with empty keys. Add keys before syncing.";
+  renderStats();
+  renderCalendar();
+  renderSelectedDate();
+  renderOpenPositions();
+  renderSymbolAnalytics();
+  renderPerformanceCharts();
+  renderMiniCharts();
+  renderMarketChartSummary();
+  syncStatus.textContent = config.apiKey
+    ? `${config.rememberKeys ? "MEXC keys remembered on this device." : "MEXC keys saved for this browser session only."} Money values now display in pesos.`
+    : "Saved with empty keys. Add keys before syncing. Money values will display in pesos.";
 });
 
 aiChartForm.addEventListener("submit", analyzeChartScreenshot);
@@ -473,6 +488,7 @@ function renderWeekdays() {
 async function bootstrap() {
   registerServiceWorker();
   hydrateMexcForm();
+  applyCurrencyPreferences(loadMexcConfig());
   setDefaultSyncRange();
   window.setTimeout(() => document.getElementById("appSplash")?.classList.add("is-hidden"), 700);
   const session = await restoreSession();
@@ -531,6 +547,7 @@ function initializeDashboard() {
   hydrateGoalsForm();
   renderMarketSymbolChips();
   updateLiveChartUi();
+  renderMarketChartSummary();
   updateMobileTradeBar();
   hydrateSymbolJournal();
   renderAlerts();
@@ -952,6 +969,12 @@ function mergeCloudProfileIntoState(profile) {
   if (preferences.selectedWatchlist && (preferences.selectedWatchlist === "all" || preferences.selectedWatchlist in state.watchlists)) {
     state.selectedWatchlist = preferences.selectedWatchlist;
   }
+  if (preferences.fiatCurrency === "PHP") {
+    state.fiatCurrency = "PHP";
+  }
+  if (Number(preferences.usdtToPhpRate) > 0) {
+    state.usdtToPhpRate = Number(preferences.usdtToPhpRate);
+  }
 }
 
 function scheduleProfileSave() {
@@ -988,6 +1011,8 @@ async function saveProfileToCloud() {
       marketType: state.marketType,
       marketView: state.marketView,
       selectedWatchlist: state.selectedWatchlist,
+      fiatCurrency: state.fiatCurrency,
+      usdtToPhpRate: state.usdtToPhpRate,
     },
   };
 
@@ -1132,6 +1157,10 @@ function loadMexcConfig() {
     symbols: String(merged.symbols || "").trim(),
     startDate: String(merged.startDate || "").trim(),
     endDate: String(merged.endDate || "").trim(),
+    fiatCurrency: DEFAULT_FIAT_CURRENCY,
+    usdtToPhpRate: Number(merged.usdtToPhpRate || DEFAULT_USDT_TO_PHP_RATE) > 0
+      ? Number(merged.usdtToPhpRate || DEFAULT_USDT_TO_PHP_RATE)
+      : DEFAULT_USDT_TO_PHP_RATE,
     rememberKeys: Boolean(localConfig.apiKey || localConfig.apiSecret),
   };
 }
@@ -1152,6 +1181,12 @@ function hydrateMexcForm() {
   mexcForm.elements.symbols.value = config.symbols;
   mexcForm.elements.startDate.value = config.startDate;
   mexcForm.elements.endDate.value = config.endDate;
+  if (mexcForm.elements.fiatCurrency) {
+    mexcForm.elements.fiatCurrency.value = config.fiatCurrency;
+  }
+  if (mexcForm.elements.usdtToPhpRate) {
+    mexcForm.elements.usdtToPhpRate.value = config.usdtToPhpRate;
+  }
   mexcForm.elements.rememberKeys.checked = config.rememberKeys;
 }
 
@@ -1165,9 +1200,24 @@ function clearMexcKeys() {
   sessionStorage.removeItem(MEXC_SESSION_KEY);
   mexcForm.reset();
   mexcForm.elements.apiBase.value = "https://api.mexc.com";
+  if (mexcForm.elements.fiatCurrency) {
+    mexcForm.elements.fiatCurrency.value = DEFAULT_FIAT_CURRENCY;
+  }
+  if (mexcForm.elements.usdtToPhpRate) {
+    mexcForm.elements.usdtToPhpRate.value = DEFAULT_USDT_TO_PHP_RATE;
+  }
+  applyCurrencyPreferences(loadMexcConfig());
   setDefaultSyncRange();
   resetSecretFieldStates();
-  syncStatus.textContent = "Stored MEXC keys and sync settings cleared from this browser.";
+  renderStats();
+  renderCalendar();
+  renderSelectedDate();
+  renderOpenPositions();
+  renderSymbolAnalytics();
+  renderPerformanceCharts();
+  renderMiniCharts();
+  renderMarketChartSummary();
+  syncStatus.textContent = "Stored MEXC keys and sync settings cleared from this browser. Peso display stays enabled.";
 }
 
 function clearSelectedDayNote() {
@@ -1188,6 +1238,10 @@ function readMexcForm() {
     symbols: String(formData.get("symbols") || "").trim().toUpperCase(),
     startDate: String(formData.get("startDate") || "").trim(),
     endDate: String(formData.get("endDate") || "").trim(),
+    fiatCurrency: DEFAULT_FIAT_CURRENCY,
+    usdtToPhpRate: Number(formData.get("usdtToPhpRate") || DEFAULT_USDT_TO_PHP_RATE) > 0
+      ? Number(formData.get("usdtToPhpRate") || DEFAULT_USDT_TO_PHP_RATE)
+      : DEFAULT_USDT_TO_PHP_RATE,
     rememberKeys: formData.get("rememberKeys") === "on",
   };
 }
@@ -1198,6 +1252,10 @@ function persistMexcConfig(config) {
     symbols: config.symbols,
     startDate: config.startDate,
     endDate: config.endDate,
+    fiatCurrency: DEFAULT_FIAT_CURRENCY,
+    usdtToPhpRate: Number(config.usdtToPhpRate || DEFAULT_USDT_TO_PHP_RATE) > 0
+      ? Number(config.usdtToPhpRate || DEFAULT_USDT_TO_PHP_RATE)
+      : DEFAULT_USDT_TO_PHP_RATE,
   };
 
   sessionStorage.setItem(MEXC_SESSION_KEY, JSON.stringify({
@@ -1215,6 +1273,14 @@ function persistMexcConfig(config) {
   } else {
     localStorage.setItem(MEXC_STORAGE_KEY, JSON.stringify(sharedConfig));
   }
+}
+
+function applyCurrencyPreferences(config) {
+  state.fiatCurrency = DEFAULT_FIAT_CURRENCY;
+  state.usdtToPhpRate = Number(config?.usdtToPhpRate || DEFAULT_USDT_TO_PHP_RATE) > 0
+    ? Number(config?.usdtToPhpRate || DEFAULT_USDT_TO_PHP_RATE)
+    : DEFAULT_USDT_TO_PHP_RATE;
+  scheduleProfileSave();
 }
 
 function toggleSecretField(button) {
@@ -1555,13 +1621,11 @@ async function loadMarketChart() {
     state.chartOffset = Math.max(0, Math.min(state.chartOffset, getMaxChartOffset()));
     state.chartHoverIndex = -1;
     drawMarketChart(marketChartSeries, resolvedSymbol, interval);
-    if (marketChartMeta) {
-      marketChartMeta.textContent = `${capitalize(state.marketType)} market with live MEXC feed.`;
-    }
+    renderMarketChartSummary();
     if (marketChartStatus) {
       marketChartStatus.textContent = marketChartLiveEnabled
-        ? `Live ${resolvedSymbol} ${interval} chart is streaming from MEXC.`
-        : `Loaded ${resolvedSymbol} ${interval} chart from MEXC.`;
+        ? `Live ${resolvedSymbol} ${interval} chart is streaming from MEXC in peso view.`
+        : `Loaded ${resolvedSymbol} ${interval} chart from MEXC in peso view.`;
     }
     syncMarketChartTimer();
     syncMarketChartStream(resolvedSymbol, interval);
@@ -1818,9 +1882,7 @@ function updateMobileTradeBar(nextSymbol) {
   if (mobileTradeSymbol) {
     mobileTradeSymbol.textContent = symbol || "BTCUSDT";
   }
-  if (mobileTradeMeta) {
-    mobileTradeMeta.textContent = `${capitalize(state.marketType)} market`;
-  }
+  renderMarketChartSummary();
   if (mobileTradePrice) {
     const lastPrice = getLastChartPrice() || Number(market?.lastPrice || 0);
     mobileTradePrice.textContent = lastPrice > 0 ? formatCompactPrice(lastPrice) : "--";
@@ -2008,8 +2070,8 @@ function renderSymbolAnalytics() {
     ["Realized P/L", formatSignedMoney(realized)],
     ["Win Rate", sells.length > 0 ? `${((wins / sells.length) * 100).toFixed(1)}%` : "0.0%"],
     ["Open Qty", position ? formatAmount(position.quantity) : "0"],
-    ["Avg Cost", position ? formatMoney(position.averageCost) : "0.00"],
-    ["Unrealized", position ? formatSignedMoney(position.unrealizedPnl) : "0.00"],
+    ["Avg Cost", position ? formatMoney(position.averageCost) : formatMoney(0)],
+    ["Unrealized", position ? formatSignedMoney(position.unrealizedPnl) : formatSignedMoney(0)],
   ].map(([label, value]) => `
     <article class="analytics-item">
       <span class="muted">${escapeHtml(label)}</span>
@@ -2319,9 +2381,9 @@ function renderRiskMetrics() {
   riskMetricsGrid.innerHTML = [
     ["Profit Factor", profitFactor > 0 ? profitFactor.toFixed(2) : "0.00"],
     ["Average Win", formatSignedMoney(avgWin)],
-    ["Average Loss", avgLoss > 0 ? `-${formatMoney(avgLoss)}` : "0.00"],
+    ["Average Loss", avgLoss > 0 ? formatSignedMoney(-avgLoss) : formatSignedMoney(0)],
     ["Expectancy", formatSignedMoney(expectancy)],
-    ["Max Drawdown", drawdown < 0 ? formatSignedMoney(drawdown) : "0.00"],
+    ["Max Drawdown", drawdown < 0 ? formatSignedMoney(drawdown) : formatSignedMoney(0)],
     ["Best Streak", `${streaks.bestWin}W / ${streaks.bestLoss}L`],
   ].map(([label, value]) => `
     <article class="analytics-item">
@@ -3581,11 +3643,14 @@ function formatAmount(amount) {
 }
 
 function formatMoney(amount) {
-  const numeric = Number(amount || 0);
-  return numeric.toLocaleString("en-US", {
+  const numeric = convertQuoteToFiat(amount);
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: state.fiatCurrency || DEFAULT_FIAT_CURRENCY,
+    currencyDisplay: "narrowSymbol",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  });
+  }).format(numeric);
 }
 
 function formatSignedMoney(amount) {
@@ -3601,14 +3666,44 @@ function formatPercent(value) {
 }
 
 function formatCompactPrice(value) {
+  const numeric = convertQuoteToFiat(value);
+  const maximumFractionDigits = numeric >= 1000 ? 2 : numeric >= 1 ? 4 : 6;
+  return new Intl.NumberFormat("en-PH", {
+    style: "currency",
+    currency: state.fiatCurrency || DEFAULT_FIAT_CURRENCY,
+    currencyDisplay: "narrowSymbol",
+    minimumFractionDigits: 2,
+    maximumFractionDigits,
+  }).format(numeric);
+}
+
+function convertQuoteToFiat(amount) {
+  const numeric = Number(amount || 0);
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+  if ((state.fiatCurrency || DEFAULT_FIAT_CURRENCY) === "PHP") {
+    return numeric * Math.max(Number(state.usdtToPhpRate || DEFAULT_USDT_TO_PHP_RATE), 0);
+  }
+  return numeric;
+}
+
+function formatPlainNumber(value, maximumFractionDigits = 2) {
   const numeric = Number(value || 0);
-  if (numeric >= 1000) {
-    return numeric.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  return numeric.toLocaleString("en-US", { maximumFractionDigits });
+}
+
+function getMoneyDisplayLabel() {
+  return `${state.fiatCurrency || DEFAULT_FIAT_CURRENCY} view (${formatPlainNumber(state.usdtToPhpRate, 2)} PHP per USDT)`;
+}
+
+function renderMarketChartSummary() {
+  if (marketChartMeta) {
+    marketChartMeta.textContent = getMoneyDisplayLabel();
   }
-  if (numeric >= 1) {
-    return numeric.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  if (mobileTradeMeta) {
+    mobileTradeMeta.textContent = getMoneyDisplayLabel();
   }
-  return numeric.toLocaleString("en-US", { maximumFractionDigits: 6 });
 }
 
 function formatCompactVolume(value) {
