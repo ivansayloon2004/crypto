@@ -35,23 +35,38 @@ const appShell = document.getElementById("appShell");
 const loginStatus = document.getElementById("loginStatus");
 const googleButton = document.getElementById("googleButton");
 const userEmail = document.getElementById("userEmail");
+const statRealizedPnl = document.getElementById("statRealizedPnl");
+const statRealizedPnlSub = document.getElementById("statRealizedPnlSub");
+const statTradeCount = document.getElementById("statTradeCount");
+const statTradeCountSub = document.getElementById("statTradeCountSub");
+const statWinRate = document.getElementById("statWinRate");
+const statWinRateSub = document.getElementById("statWinRateSub");
+const statBestDay = document.getElementById("statBestDay");
+const statBestDaySub = document.getElementById("statBestDaySub");
+const statWorstDay = document.getElementById("statWorstDay");
+const statWorstDaySub = document.getElementById("statWorstDaySub");
+const statMonthPnl = document.getElementById("statMonthPnl");
+const statMonthPnlSub = document.getElementById("statMonthPnlSub");
 let dashboardInitialized = false;
 
 bootstrap();
 
 document.getElementById("prevMonthButton").addEventListener("click", () => {
   state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() - 1, 1);
+  renderStats();
   renderCalendar();
 });
 
 document.getElementById("nextMonthButton").addEventListener("click", () => {
   state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() + 1, 1);
+  renderStats();
   renderCalendar();
 });
 
 document.getElementById("todayButton").addEventListener("click", () => {
   state.currentMonth = new Date();
   state.selectedDate = formatDateKey(new Date());
+  renderStats();
   renderCalendar();
   renderSelectedDate();
   hydrateDayNoteForm();
@@ -60,6 +75,7 @@ document.getElementById("todayButton").addEventListener("click", () => {
 document.getElementById("resetButton").addEventListener("click", () => {
   state.events = [];
   persistEvents();
+  renderStats();
   renderCalendar();
   renderSelectedDate();
   syncStatus.textContent = "Local calendar data cleared on this browser.";
@@ -77,6 +93,7 @@ document.getElementById("importButton").addEventListener("click", () => {
     recalculateRealizedPnl();
     persistEvents();
     jsonInput.value = "";
+    renderStats();
     renderCalendar();
     renderSelectedDate();
     syncStatus.textContent = `Imported ${normalized.length} activities into your calendar.`;
@@ -149,9 +166,44 @@ function initializeDashboard() {
   dashboardInitialized = true;
   recalculateRealizedPnl();
   renderWeekdays();
+  renderStats();
   renderCalendar();
   renderSelectedDate();
   hydrateDayNoteForm();
+}
+
+function renderStats() {
+  const events = [...state.events];
+  const realizedTotal = events.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
+  const realizedTrades = events.filter((entry) => entry.side === "sell");
+  const winners = realizedTrades.filter((entry) => getRealizedPnl(entry) > 0);
+  const visibleMonthKey = `${state.currentMonth.getFullYear()}-${String(state.currentMonth.getMonth() + 1).padStart(2, "0")}`;
+  const monthEvents = events.filter((entry) => entry.date.startsWith(visibleMonthKey));
+  const monthPnl = monthEvents.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
+  const dayTotals = getDailyRealizedTotals(events);
+  const bestDay = dayTotals.length > 0 ? dayTotals.reduce((best, entry) => (entry.pnl > best.pnl ? entry : best)) : null;
+  const worstDay = dayTotals.length > 0 ? dayTotals.reduce((worst, entry) => (entry.pnl < worst.pnl ? entry : worst)) : null;
+  const winRate = realizedTrades.length > 0 ? (winners.length / realizedTrades.length) * 100 : 0;
+
+  statRealizedPnl.textContent = formatSignedMoney(realizedTotal);
+  statRealizedPnl.className = realizedTotal > 0 ? "positive-text" : realizedTotal < 0 ? "negative-text" : "";
+  statRealizedPnlSub.textContent = `${realizedTrades.length} realized sell trade${realizedTrades.length === 1 ? "" : "s"}`;
+
+  statTradeCount.textContent = String(events.length);
+  statTradeCountSub.textContent = `${events.filter((entry) => entry.side === "buy").length} buys, ${events.filter((entry) => entry.side === "sell").length} sells`;
+
+  statWinRate.textContent = `${winRate.toFixed(1)}%`;
+  statWinRateSub.textContent = `${winners.length} winning sell${winners.length === 1 ? "" : "s"} out of ${realizedTrades.length}`;
+
+  statBestDay.textContent = bestDay ? formatShortDate(bestDay.date) : "None";
+  statBestDaySub.textContent = bestDay ? formatSignedMoney(bestDay.pnl) : "No realized results yet";
+
+  statWorstDay.textContent = worstDay ? formatShortDate(worstDay.date) : "None";
+  statWorstDaySub.textContent = worstDay ? formatSignedMoney(worstDay.pnl) : "No realized results yet";
+
+  statMonthPnl.textContent = formatSignedMoney(monthPnl);
+  statMonthPnl.className = monthPnl > 0 ? "positive-text" : monthPnl < 0 ? "negative-text" : "";
+  statMonthPnlSub.textContent = `${monthEvents.length} trade${monthEvents.length === 1 ? "" : "s"} in ${new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(state.currentMonth)}`;
 }
 
 function renderCalendar() {
@@ -297,6 +349,7 @@ async function syncMexc() {
     state.events = mergeEvents(state.events.filter((entry) => entry.type === "trade"), normalized);
     recalculateRealizedPnl();
     persistEvents();
+    renderStats();
     renderCalendar();
     renderSelectedDate();
     syncStatus.textContent = `Synced ${normalized.length} trades from MEXC.`;
@@ -622,6 +675,7 @@ function deleteActivity(id) {
 
   recalculateRealizedPnl();
   persistEvents();
+  renderStats();
   renderCalendar();
   renderSelectedDate();
   hydrateDayNoteForm();
@@ -669,6 +723,23 @@ function summarizeTrades(events) {
 
 function getRealizedPnl(entry) {
   return Number(entry.realizedPnl || 0);
+}
+
+function getDailyRealizedTotals(events) {
+  const totals = new Map();
+  events.forEach((entry) => {
+    const next = (totals.get(entry.date) || 0) + getRealizedPnl(entry);
+    totals.set(entry.date, next);
+  });
+  return [...totals.entries()].map(([date, pnl]) => ({ date, pnl }));
+}
+
+function formatShortDate(dateKey) {
+  const parsed = new Date(`${dateKey}T00:00:00`);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(parsed);
 }
 
 function recalculateRealizedPnl() {

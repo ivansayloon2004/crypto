@@ -147,6 +147,22 @@ h1 {
   gap: 22px;
 }
 
+.main-column {
+  display: grid;
+  gap: 22px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.stat-card h2 {
+  margin-bottom: 8px;
+  font-size: clamp(1.5rem, 2vw, 2.3rem);
+}
+
 .sidebar {
   display: grid;
   gap: 22px;
@@ -503,6 +519,10 @@ code {
   .card-calendar {
     min-height: auto;
   }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -533,6 +553,10 @@ code {
   }
 
   .split-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-grid {
     grid-template-columns: 1fr;
   }
 }
