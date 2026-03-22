@@ -29,6 +29,10 @@ const state = {
   favorites: loadFavorites(),
   alerts: loadAlerts(),
   symbolJournal: loadSymbolJournal(),
+  tradeHistorySort: {
+    key: "executedAt",
+    direction: "desc",
+  },
 };
 
 const monthLabel = document.getElementById("monthLabel");
@@ -86,6 +90,9 @@ const chartModalTitle = document.getElementById("chartModalTitle");
 const chartModalCanvas = document.getElementById("chartModalCanvas");
 const equityCurveCanvas = document.getElementById("equityCurveCanvas");
 const dailyPnlCanvas = document.getElementById("dailyPnlCanvas");
+const monthlyReviewGrid = document.getElementById("monthlyReviewGrid");
+const symbolPnlTable = document.getElementById("symbolPnlTable");
+const tradeHistoryTable = document.getElementById("tradeHistoryTable");
 const chartHoverInfo = document.getElementById("chartHoverInfo");
 const indicatorVolume = document.getElementById("indicatorVolume");
 const indicatorEma20 = document.getElementById("indicatorEma20");
@@ -153,12 +160,14 @@ document.getElementById("prevMonthButton").addEventListener("click", () => {
   state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() - 1, 1);
   renderStats();
   renderCalendar();
+  renderPerformanceCharts();
 });
 
 document.getElementById("nextMonthButton").addEventListener("click", () => {
   state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() + 1, 1);
   renderStats();
   renderCalendar();
+  renderPerformanceCharts();
 });
 
 document.getElementById("todayButton").addEventListener("click", () => {
@@ -168,6 +177,7 @@ document.getElementById("todayButton").addEventListener("click", () => {
   renderCalendar();
   renderSelectedDate();
   hydrateDayNoteForm();
+  renderPerformanceCharts();
 });
 
 document.getElementById("resetButton").addEventListener("click", () => {
@@ -176,6 +186,9 @@ document.getElementById("resetButton").addEventListener("click", () => {
   renderStats();
   renderCalendar();
   renderSelectedDate();
+  renderSymbolAnalytics();
+  renderMiniCharts();
+  renderPerformanceCharts();
   syncStatus.textContent = "Local calendar data cleared on this browser.";
 });
 
@@ -194,6 +207,9 @@ document.getElementById("importButton").addEventListener("click", () => {
     renderStats();
     renderCalendar();
     renderSelectedDate();
+    renderSymbolAnalytics();
+    renderMiniCharts();
+    renderPerformanceCharts();
     syncStatus.textContent = `Imported ${normalized.length} activities into your calendar.`;
   } catch (error) {
     syncStatus.textContent = `Import failed: ${error.message}`;
@@ -307,13 +323,13 @@ function initializeDashboard() {
   renderMarketSymbolChips();
   updateLiveChartUi();
   hydrateSymbolJournal();
-    renderAlerts();
-    renderSymbolAnalytics();
-    renderMiniCharts();
-    renderPerformanceCharts();
-    loadMarketCatalog();
-    loadMarketChart();
-    switchMainWindow("overview");
+  renderAlerts();
+  renderSymbolAnalytics();
+  renderMiniCharts();
+  renderPerformanceCharts();
+  loadMarketCatalog();
+  loadMarketChart();
+  switchMainWindow("overview");
   switchSidebarPane("day");
 }
 
@@ -566,6 +582,7 @@ async function syncMexc() {
     renderCalendar();
     renderSelectedDate();
     renderSymbolAnalytics();
+    renderMiniCharts();
     renderPerformanceCharts();
     syncStatus.textContent = `Synced ${normalized.length} trades from MEXC.`;
   } catch (error) {
@@ -1263,6 +1280,7 @@ function checkAlertsForSymbol(symbol, price) {
 
     changed = true;
     syncStatus.textContent = `Alert hit: ${symbol} crossed ${alert.direction} ${formatMoney(alert.price)}.`;
+    notifyAlertTriggered(alert, price);
     return { ...alert, triggered: true };
   });
 
@@ -1416,6 +1434,166 @@ async function analyzeCurrentChartCanvas() {
 function renderPerformanceCharts() {
   drawEquityCurve();
   drawDailyPnlBars();
+  renderMonthlyReview();
+  renderSymbolPnlTable();
+  renderTradeHistoryTable();
+}
+
+function renderMonthlyReview() {
+  if (!monthlyReviewGrid) {
+    return;
+  }
+
+  const monthKey = `${state.currentMonth.getFullYear()}-${String(state.currentMonth.getMonth() + 1).padStart(2, "0")}`;
+  const monthEvents = state.events.filter((entry) => entry.date.startsWith(monthKey));
+  const sells = monthEvents.filter((entry) => entry.side === "sell");
+  const realized = monthEvents.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
+  const wins = sells.filter((entry) => getRealizedPnl(entry) > 0).length;
+  const dayTotals = getDailyRealizedTotals(monthEvents);
+  const bestDay = dayTotals.length > 0 ? dayTotals.reduce((best, entry) => (entry.pnl > best.pnl ? entry : best)) : null;
+  const worstDay = dayTotals.length > 0 ? dayTotals.reduce((worst, entry) => (entry.pnl < worst.pnl ? entry : worst)) : null;
+  const avgSell = sells.length > 0 ? sells.reduce((sum, entry) => sum + getRealizedPnl(entry), 0) / sells.length : 0;
+
+  monthlyReviewGrid.innerHTML = [
+    ["Month Realized", formatSignedMoney(realized), realized],
+    ["Sell Win Rate", sells.length > 0 ? `${((wins / sells.length) * 100).toFixed(1)}%` : "0.0%", sells.length > 0 ? wins / sells.length : 0],
+    ["Best Day", bestDay ? `${formatShortDate(bestDay.date)} ${formatSignedMoney(bestDay.pnl)}` : "No realized day yet", bestDay?.pnl || 0],
+    ["Worst Day", worstDay ? `${formatShortDate(worstDay.date)} ${formatSignedMoney(worstDay.pnl)}` : "No losing day yet", worstDay?.pnl || 0],
+    ["Sell Average", formatSignedMoney(avgSell), avgSell],
+    ["Trade Count", `${monthEvents.length} trades`, monthEvents.length],
+  ].map(([label, value, numeric]) => `
+    <article class="analytics-item">
+      <span class="muted">${escapeHtml(String(label))}</span>
+      <strong class="${Number(numeric) > 0 ? "positive-text" : Number(numeric) < 0 ? "negative-text" : ""}">${escapeHtml(String(value))}</strong>
+    </article>
+  `).join("");
+}
+
+function renderSymbolPnlTable() {
+  if (!symbolPnlTable) {
+    return;
+  }
+
+  const rows = [...groupTradesBySymbol(state.events).values()]
+    .map((group) => {
+      const sellCount = group.trades.filter((entry) => entry.side === "sell").length;
+      const winCount = group.trades.filter((entry) => entry.side === "sell" && getRealizedPnl(entry) > 0).length;
+      return {
+        symbol: group.symbol,
+        realized: group.trades.reduce((sum, entry) => sum + getRealizedPnl(entry), 0),
+        trades: group.trades.length,
+        winRate: sellCount > 0 ? (winCount / sellCount) * 100 : 0,
+        openQty: state.openPositions.find((entry) => entry.symbol === group.symbol)?.quantity || 0,
+      };
+    })
+    .sort((left, right) => Math.abs(right.realized) - Math.abs(left.realized))
+    .slice(0, 10);
+
+  if (rows.length === 0) {
+    symbolPnlTable.innerHTML = `<div class="empty-state">Sync trades to see which symbols perform best.</div>`;
+    return;
+  }
+
+  symbolPnlTable.innerHTML = `
+    <div class="table-head">
+      <span>Symbol</span>
+      <span>Realized</span>
+      <span>Trades</span>
+      <span>Open Qty</span>
+    </div>
+    ${rows.map((row) => `
+      <div class="table-row">
+        <span><strong>${escapeHtml(row.symbol)}</strong><br /><span class="muted">${row.winRate.toFixed(1)}% win</span></span>
+        <span class="${row.realized > 0 ? "positive-text" : row.realized < 0 ? "negative-text" : ""}">${formatSignedMoney(row.realized)}</span>
+        <span>${row.trades}</span>
+        <span>${formatAmount(row.openQty)}</span>
+      </div>
+    `).join("")}
+  `;
+}
+
+function renderTradeHistoryTable() {
+  if (!tradeHistoryTable) {
+    return;
+  }
+
+  const rows = getSortedTradeHistoryRows().slice(0, 16);
+  if (rows.length === 0) {
+    tradeHistoryTable.innerHTML = `<div class="empty-state">Your synced trades will appear here.</div>`;
+    return;
+  }
+
+  tradeHistoryTable.innerHTML = `
+    <div class="table-head">
+      ${renderTradeHistorySortButton("Date", "executedAt")}
+      ${renderTradeHistorySortButton("Symbol", "asset")}
+      ${renderTradeHistorySortButton("Side", "side")}
+      ${renderTradeHistorySortButton("Realized", "realizedPnl")}
+    </div>
+    ${rows.map((entry) => `
+      <div class="table-row">
+        <span>
+          <strong>${escapeHtml(formatDateTime(Date.parse(entry.executedAt || `${entry.date}T00:00:00Z`) || 0))}</strong><br />
+          <span class="muted">${escapeHtml(entry.date)}</span>
+        </span>
+        <span>
+          <strong>${escapeHtml(entry.asset)}</strong><br />
+          <span class="muted">${formatAmount(entry.amount)} @ ${formatMoney(entry.price)}</span>
+        </span>
+        <span>
+          <span class="event-type">${escapeHtml(entry.side || "trade")}</span><br />
+          <span class="muted">${formatMoney(entry.quoteAmount)}</span>
+        </span>
+        <span class="${getRealizedPnl(entry) > 0 ? "positive-text" : getRealizedPnl(entry) < 0 ? "negative-text" : ""}">
+          <strong>${formatSignedMoney(getRealizedPnl(entry))}</strong>
+        </span>
+      </div>
+    `).join("")}
+  `;
+
+  tradeHistoryTable.querySelectorAll("[data-sort-key]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextKey = String(button.dataset.sortKey || "");
+      if (!nextKey) {
+        return;
+      }
+      if (state.tradeHistorySort.key === nextKey) {
+        state.tradeHistorySort.direction = state.tradeHistorySort.direction === "asc" ? "desc" : "asc";
+      } else {
+        state.tradeHistorySort.key = nextKey;
+        state.tradeHistorySort.direction = nextKey === "asset" || nextKey === "side" ? "asc" : "desc";
+      }
+      renderTradeHistoryTable();
+    });
+  });
+}
+
+function renderTradeHistorySortButton(label, key) {
+  const active = state.tradeHistorySort.key === key;
+  const arrow = active ? (state.tradeHistorySort.direction === "asc" ? "↑" : "↓") : "";
+  return `<button class="button ${active ? "button-primary" : "button-ghost"}" type="button" data-sort-key="${escapeHtml(key)}">${escapeHtml(label)} ${arrow}</button>`;
+}
+
+function getSortedTradeHistoryRows() {
+  const rows = [...state.events];
+  const key = state.tradeHistorySort.key;
+  const factor = state.tradeHistorySort.direction === "asc" ? 1 : -1;
+
+  rows.sort((left, right) => {
+    let comparison = 0;
+    if (key === "asset" || key === "side") {
+      comparison = String(left[key] || "").localeCompare(String(right[key] || ""));
+    } else if (key === "realizedPnl") {
+      comparison = getRealizedPnl(left) - getRealizedPnl(right);
+    } else {
+      const leftValue = Date.parse(left.executedAt || `${left.date}T00:00:00Z`) || 0;
+      const rightValue = Date.parse(right.executedAt || `${right.date}T00:00:00Z`) || 0;
+      comparison = leftValue - rightValue;
+    }
+    return comparison * factor;
+  });
+
+  return rows;
 }
 
 function drawEquityCurve() {
@@ -1708,6 +1886,8 @@ function drawCandlesOnCanvas(canvas, klines, symbol, interval) {
     drawLineSeries(context, calculateEmaSeries(normalized, 50), maxPrice, priceRange, chartHeight, padding, chartWidth, "#7dc4ff");
   }
 
+  drawTradeMarkers(context, normalized, symbol, maxPrice, priceRange, chartHeight, padding, gap);
+
   const last = normalized[normalized.length - 1];
   if (canvas === marketChartCanvas && marketChartTitle) {
     marketChartTitle.textContent = `${symbol} ${interval}`;
@@ -1718,6 +1898,44 @@ function drawCandlesOnCanvas(canvas, klines, symbol, interval) {
   if (canvas === marketChartCanvas) {
     bindChartHover(normalized, symbol, interval, maxPrice, priceRange, chartHeight, padding, gap);
   }
+}
+
+function drawTradeMarkers(context, normalized, symbol, maxPrice, priceRange, chartHeight, padding, gap) {
+  const tradeSymbol = normalizeChartSymbol(symbol, "spot");
+  const candleSpan = getFallbackCandleSpan(normalized);
+  const matchingTrades = state.events.filter((entry) => String(entry.asset || "").toUpperCase() === tradeSymbol);
+
+  matchingTrades.forEach((trade) => {
+    const tradeTime = Date.parse(trade.executedAt || `${trade.date}T00:00:00Z`) || 0;
+    const candleIndex = normalized.findIndex((candle, index) => {
+      const currentStart = candle.time;
+      const nextStart = normalized[index + 1]?.time || currentStart + candleSpan;
+      return tradeTime >= currentStart && tradeTime < nextStart;
+    });
+
+    if (candleIndex < 0) {
+      return;
+    }
+
+    const x = padding.left + gap * candleIndex + gap / 2;
+    const price = Number(trade.price || normalized[candleIndex].close || 0);
+    const y = padding.top + ((maxPrice - price) / priceRange) * chartHeight;
+
+    context.beginPath();
+    context.fillStyle = trade.side === "buy" ? "#7dc4ff" : "#ffca6b";
+    context.arc(x, y, 4, 0, Math.PI * 2);
+    context.fill();
+    context.strokeStyle = "#07111d";
+    context.lineWidth = 1.5;
+    context.stroke();
+  });
+}
+
+function getFallbackCandleSpan(normalized) {
+  if (normalized.length > 1) {
+    return Math.max(60_000, normalized[1].time - normalized[0].time);
+  }
+  return 4 * 60 * 60 * 1000;
 }
 
 function toggleLiveChart() {
@@ -2058,6 +2276,64 @@ function persistSymbolJournal() {
   localStorage.setItem(SYMBOL_JOURNAL_STORAGE_KEY, JSON.stringify(state.symbolJournal));
 }
 
+function notifyAlertTriggered(alert, livePrice) {
+  const summary = `${alert.symbol} moved ${alert.direction} ${formatMoney(alert.price)}. Last ${formatMoney(livePrice)}.`;
+  playAlertTone();
+
+  if (!("Notification" in window)) {
+    return;
+  }
+
+  if (Notification.permission === "granted") {
+    new Notification("Crypto Calendar Alert", { body: summary });
+    return;
+  }
+
+  if (Notification.permission === "default") {
+    Notification.requestPermission().then((permission) => {
+      if (permission === "granted") {
+        new Notification("Crypto Calendar Alert", { body: summary });
+      }
+    }).catch(() => {});
+  }
+}
+
+function playAlertTone() {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) {
+    return;
+  }
+
+  const context = new AudioCtx();
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.type = "sine";
+  oscillator.frequency.value = 880;
+  gain.gain.value = 0.04;
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start();
+  oscillator.stop(context.currentTime + 0.18);
+  oscillator.onended = () => context.close().catch(() => {});
+}
+
+function groupTradesBySymbol(events) {
+  return events.reduce((groups, entry) => {
+    const symbol = String(entry.asset || "").toUpperCase();
+    if (!groups.has(symbol)) {
+      groups.set(symbol, { symbol, trades: [] });
+    }
+    groups.get(symbol).trades.push(entry);
+    return groups;
+  }, new Map());
+}
+
+function renderTradeHistorySortButton(label, key) {
+  const active = state.tradeHistorySort.key === key;
+  const arrow = active ? (state.tradeHistorySort.direction === "asc" ? "^" : "v") : "";
+  return `<button class="button ${active ? "button-primary" : "button-ghost"}" type="button" data-sort-key="${escapeHtml(key)}">${escapeHtml(label)} ${arrow}</button>`;
+}
+
 function getEventsForDate(dateKey) {
   return state.events.filter((entry) => entry.date === dateKey);
 }
@@ -2112,6 +2388,7 @@ function deleteActivity(id) {
   hydrateDayNoteForm();
   renderSymbolAnalytics();
   renderPerformanceCharts();
+  renderMiniCharts();
   syncStatus.textContent = "Trade deleted from your calendar.";
 }
 

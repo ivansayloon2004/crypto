@@ -486,6 +486,40 @@ h1 {
   height: 240px;
 }
 
+.table-shell {
+  display: grid;
+  gap: 10px;
+}
+
+.table-head,
+.table-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: center;
+}
+
+.table-head {
+  padding: 0 10px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.table-head .button {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.table-row {
+  padding: 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
 .mini-charts-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
