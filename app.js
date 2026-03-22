@@ -178,6 +178,23 @@ function initializeDashboard() {
 }
 
 function renderStats() {
+  if (
+    !statRealizedPnl ||
+    !statRealizedPnlSub ||
+    !statTradeCount ||
+    !statTradeCountSub ||
+    !statWinRate ||
+    !statWinRateSub ||
+    !statBestDay ||
+    !statBestDaySub ||
+    !statWorstDay ||
+    !statWorstDaySub ||
+    !statMonthPnl ||
+    !statMonthPnlSub
+  ) {
+    return;
+  }
+
   const events = [...state.events];
   const realizedTotal = events.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
   const unrealizedTotal = state.openPositions.reduce((sum, entry) => sum + entry.unrealizedPnl, 0);
@@ -191,9 +208,13 @@ function renderStats() {
   const worstDay = dayTotals.length > 0 ? dayTotals.reduce((worst, entry) => (entry.pnl < worst.pnl ? entry : worst)) : null;
   const winRate = realizedTrades.length > 0 ? (winners.length / realizedTrades.length) * 100 : 0;
 
-  statUnrealizedPnl.textContent = formatSignedMoney(unrealizedTotal);
-  statUnrealizedPnl.className = unrealizedTotal > 0 ? "positive-text" : unrealizedTotal < 0 ? "negative-text" : "";
-  statUnrealizedPnlSub.textContent = state.openPositions.length > 0 ? `${state.openPositions.length} open position${state.openPositions.length === 1 ? "" : "s"}` : "Needs fresh market prices";
+  if (statUnrealizedPnl) {
+    statUnrealizedPnl.textContent = formatSignedMoney(unrealizedTotal);
+    statUnrealizedPnl.className = unrealizedTotal > 0 ? "positive-text" : unrealizedTotal < 0 ? "negative-text" : "";
+  }
+  if (statUnrealizedPnlSub) {
+    statUnrealizedPnlSub.textContent = state.openPositions.length > 0 ? `${state.openPositions.length} open position${state.openPositions.length === 1 ? "" : "s"}` : "Needs fresh market prices";
+  }
 
   statRealizedPnl.textContent = formatSignedMoney(realizedTotal);
   statRealizedPnl.className = realizedTotal > 0 ? "positive-text" : realizedTotal < 0 ? "negative-text" : "";
@@ -755,6 +776,10 @@ function formatShortDate(dateKey) {
 }
 
 function renderOpenPositions() {
+  if (!openPositionsList) {
+    return;
+  }
+
   if (state.openPositions.length === 0) {
     openPositionsList.className = "event-list empty-state";
     openPositionsList.textContent = "No open positions detected from synced trade history.";
