@@ -36,6 +36,16 @@ const overviewWindowTab = document.getElementById("overviewWindowTab");
 const marketsWindowTab = document.getElementById("marketsWindowTab");
 const overviewWindow = document.getElementById("overviewWindow");
 const marketsWindow = document.getElementById("marketsWindow");
+const sidebarTabDay = document.getElementById("sidebarTabDay");
+const sidebarTabNotes = document.getElementById("sidebarTabNotes");
+const sidebarTabMexc = document.getElementById("sidebarTabMexc");
+const sidebarTabAi = document.getElementById("sidebarTabAi");
+const sidebarTabImport = document.getElementById("sidebarTabImport");
+const sidebarPaneDay = document.getElementById("sidebarPaneDay");
+const sidebarPaneNotes = document.getElementById("sidebarPaneNotes");
+const sidebarPaneMexc = document.getElementById("sidebarPaneMexc");
+const sidebarPaneAi = document.getElementById("sidebarPaneAi");
+const sidebarPaneImport = document.getElementById("sidebarPaneImport");
 const calendarGrid = document.getElementById("calendarGrid");
 const weekdayRow = document.getElementById("weekdayRow");
 const selectedDateLabel = document.getElementById("selectedDateLabel");
@@ -68,6 +78,14 @@ const marketChartMeta = document.getElementById("marketChartMeta");
 const marketChartPrice = document.getElementById("marketChartPrice");
 const marketChartLiveBadge = document.getElementById("marketChartLiveBadge");
 const marketChartCanvas = document.getElementById("marketChartCanvas");
+const openChartModalButton = document.getElementById("openChartModalButton");
+const chartModal = document.getElementById("chartModal");
+const chartModalBackdrop = document.getElementById("chartModalBackdrop");
+const closeChartModalButton = document.getElementById("closeChartModalButton");
+const chartModalTitle = document.getElementById("chartModalTitle");
+const chartModalCanvas = document.getElementById("chartModalCanvas");
+const equityCurveCanvas = document.getElementById("equityCurveCanvas");
+const dailyPnlCanvas = document.getElementById("dailyPnlCanvas");
 const chartHoverInfo = document.getElementById("chartHoverInfo");
 const indicatorVolume = document.getElementById("indicatorVolume");
 const indicatorEma20 = document.getElementById("indicatorEma20");
@@ -125,6 +143,11 @@ bootstrap();
 
 overviewWindowTab?.addEventListener("click", () => switchMainWindow("overview"));
 marketsWindowTab?.addEventListener("click", () => switchMainWindow("markets"));
+sidebarTabDay?.addEventListener("click", () => switchSidebarPane("day"));
+sidebarTabNotes?.addEventListener("click", () => switchSidebarPane("notes"));
+sidebarTabMexc?.addEventListener("click", () => switchSidebarPane("mexc"));
+sidebarTabAi?.addEventListener("click", () => switchSidebarPane("ai"));
+sidebarTabImport?.addEventListener("click", () => switchSidebarPane("import"));
 
 document.getElementById("prevMonthButton").addEventListener("click", () => {
   state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() - 1, 1);
@@ -226,6 +249,9 @@ indicatorVolume?.addEventListener("change", redrawCurrentChart);
 indicatorEma20?.addEventListener("change", redrawCurrentChart);
 indicatorEma50?.addEventListener("change", redrawCurrentChart);
 chartImageInput.addEventListener("change", handleChartPreview);
+openChartModalButton?.addEventListener("click", openChartModal);
+chartModalBackdrop?.addEventListener("click", closeChartModal);
+closeChartModalButton?.addEventListener("click", closeChartModal);
 fieldToggles.forEach((button) => {
   button.addEventListener("click", () => toggleSecretField(button));
 });
@@ -281,12 +307,14 @@ function initializeDashboard() {
   renderMarketSymbolChips();
   updateLiveChartUi();
   hydrateSymbolJournal();
-  renderAlerts();
-  renderSymbolAnalytics();
-  renderMiniCharts();
-  loadMarketCatalog();
-  loadMarketChart();
-  switchMainWindow("overview");
+    renderAlerts();
+    renderSymbolAnalytics();
+    renderMiniCharts();
+    renderPerformanceCharts();
+    loadMarketCatalog();
+    loadMarketChart();
+    switchMainWindow("overview");
+  switchSidebarPane("day");
 }
 
 function switchMainWindow(view) {
@@ -295,6 +323,38 @@ function switchMainWindow(view) {
   marketsWindow?.classList.toggle("is-active", !isOverview);
   overviewWindowTab.className = isOverview ? "button button-primary" : "button button-ghost";
   marketsWindowTab.className = isOverview ? "button button-ghost" : "button button-primary";
+}
+
+function switchSidebarPane(view) {
+  const paneMap = {
+    day: [sidebarTabDay, sidebarPaneDay],
+    notes: [sidebarTabNotes, sidebarPaneNotes],
+    mexc: [sidebarTabMexc, sidebarPaneMexc],
+    ai: [sidebarTabAi, sidebarPaneAi],
+    import: [sidebarTabImport, sidebarPaneImport],
+  };
+
+  Object.entries(paneMap).forEach(([key, pair]) => {
+    const [tab, pane] = pair;
+    const active = key === view;
+    tab?.classList.toggle("button-primary", active);
+    tab?.classList.toggle("button-ghost", !active);
+    pane?.classList.toggle("is-active", active);
+  });
+}
+
+function openChartModal() {
+  if (!chartModal || !chartModalCanvas) {
+    return;
+  }
+
+  chartModal.classList.remove("is-hidden");
+  chartModalTitle.textContent = `${marketSymbolInput.value} ${marketIntervalSelect.value} Full Screen`;
+  drawCandlesOnCanvas(chartModalCanvas, marketChartSeries, marketSymbolInput.value, marketIntervalSelect.value);
+}
+
+function closeChartModal() {
+  chartModal?.classList.add("is-hidden");
 }
 
 function renderStats() {
@@ -506,6 +566,7 @@ async function syncMexc() {
     renderCalendar();
     renderSelectedDate();
     renderSymbolAnalytics();
+    renderPerformanceCharts();
     syncStatus.textContent = `Synced ${normalized.length} trades from MEXC.`;
   } catch (error) {
     syncStatus.textContent = `MEXC sync unavailable: ${error.message}`;
@@ -1352,6 +1413,97 @@ async function analyzeCurrentChartCanvas() {
   await submitChartAnalysis(dataUrl, chartContextInput.value.trim());
 }
 
+function renderPerformanceCharts() {
+  drawEquityCurve();
+  drawDailyPnlBars();
+}
+
+function drawEquityCurve() {
+  if (!equityCurveCanvas) {
+    return;
+  }
+
+  const context = equityCurveCanvas.getContext("2d");
+  context.clearRect(0, 0, equityCurveCanvas.width, equityCurveCanvas.height);
+  const dayTotals = getDailyRealizedTotals(state.events).sort((left, right) => left.date.localeCompare(right.date));
+  if (dayTotals.length === 0) {
+    drawEmptyCanvasMessage(context, equityCurveCanvas, "Sync trades to see your equity curve.");
+    return;
+  }
+
+  const cumulative = [];
+  let running = 0;
+  dayTotals.forEach((entry) => {
+    running += entry.pnl;
+    cumulative.push(running);
+  });
+
+  drawLineCanvas(context, equityCurveCanvas, cumulative, "#7dc4ff");
+}
+
+function drawDailyPnlBars() {
+  if (!dailyPnlCanvas) {
+    return;
+  }
+
+  const context = dailyPnlCanvas.getContext("2d");
+  context.clearRect(0, 0, dailyPnlCanvas.width, dailyPnlCanvas.height);
+  const dayTotals = getDailyRealizedTotals(state.events).sort((left, right) => left.date.localeCompare(right.date));
+  if (dayTotals.length === 0) {
+    drawEmptyCanvasMessage(context, dailyPnlCanvas, "Your daily realized P/L will appear here.");
+    return;
+  }
+
+  const width = dailyPnlCanvas.width;
+  const height = dailyPnlCanvas.height;
+  const padding = 20;
+  const zeroY = height / 2;
+  const maxAbs = Math.max(...dayTotals.map((entry) => Math.abs(entry.pnl)), 1);
+  const barWidth = Math.max(8, (width - padding * 2) / dayTotals.length - 6);
+
+  context.strokeStyle = "rgba(255,255,255,0.08)";
+  context.beginPath();
+  context.moveTo(padding, zeroY);
+  context.lineTo(width - padding, zeroY);
+  context.stroke();
+
+  dayTotals.forEach((entry, index) => {
+    const x = padding + index * ((width - padding * 2) / dayTotals.length) + 3;
+    const barHeight = Math.abs(entry.pnl) / maxAbs * (height / 2 - padding);
+    const y = entry.pnl >= 0 ? zeroY - barHeight : zeroY;
+    context.fillStyle = entry.pnl >= 0 ? "rgba(68,215,182,0.85)" : "rgba(255,138,128,0.85)";
+    context.fillRect(x, y, barWidth, barHeight);
+  });
+}
+
+function drawLineCanvas(context, canvas, values, strokeStyle) {
+  const width = canvas.width;
+  const height = canvas.height;
+  const padding = 20;
+  const min = Math.min(...values);
+  const max = Math.max(...values, min + 1);
+  context.strokeStyle = strokeStyle;
+  context.lineWidth = 2.4;
+  context.beginPath();
+  values.forEach((value, index) => {
+    const x = padding + (index / Math.max(values.length - 1, 1)) * (width - padding * 2);
+    const y = height - padding - ((value - min) / (max - min || 1)) * (height - padding * 2);
+    if (index === 0) {
+      context.moveTo(x, y);
+    } else {
+      context.lineTo(x, y);
+    }
+  });
+  context.stroke();
+}
+
+function drawEmptyCanvasMessage(context, canvas, message) {
+  context.fillStyle = "rgba(158,178,202,0.9)";
+  context.font = "14px Space Grotesk, sans-serif";
+  context.textAlign = "center";
+  context.fillText(message, canvas.width / 2, canvas.height / 2);
+}
+
 function normalizeChartSymbol(symbol, marketType) {
   const raw = String(symbol || "").trim().toUpperCase();
   if (marketType === "futures") {
@@ -1464,12 +1616,21 @@ function drawMarketChart(klines, symbol, interval) {
     return;
   }
 
+  drawCandlesOnCanvas(marketChartCanvas, klines, symbol, interval);
+}
+
+function drawCandlesOnCanvas(canvas, klines, symbol, interval) {
+  if (!canvas) {
+    return;
+  }
+
   if (!Array.isArray(klines) || klines.length === 0) {
-    clearMarketChart();
+    if (canvas === marketChartCanvas) {
+      clearMarketChart();
+    }
     throw new Error("No candles returned");
   }
 
-  const canvas = marketChartCanvas;
   const context = canvas.getContext("2d");
   const width = canvas.width;
   const height = canvas.height;
@@ -1548,14 +1709,15 @@ function drawMarketChart(klines, symbol, interval) {
   }
 
   const last = normalized[normalized.length - 1];
-  if (marketChartTitle) {
+  if (canvas === marketChartCanvas && marketChartTitle) {
     marketChartTitle.textContent = `${symbol} ${interval}`;
   }
-  if (marketChartPrice) {
+  if (canvas === marketChartCanvas && marketChartPrice) {
     marketChartPrice.textContent = `Last: ${formatMoney(last.close)}`;
   }
-
-  bindChartHover(normalized, symbol, interval, maxPrice, priceRange, chartHeight, padding, gap);
+  if (canvas === marketChartCanvas) {
+    bindChartHover(normalized, symbol, interval, maxPrice, priceRange, chartHeight, padding, gap);
+  }
 }
 
 function toggleLiveChart() {
@@ -1949,6 +2111,7 @@ function deleteActivity(id) {
   renderSelectedDate();
   hydrateDayNoteForm();
   renderSymbolAnalytics();
+  renderPerformanceCharts();
   syncStatus.textContent = "Trade deleted from your calendar.";
 }
 

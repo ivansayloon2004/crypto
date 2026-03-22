@@ -100,6 +100,28 @@
             <div class="weekday-row" id="weekdayRow"></div>
             <div id="calendarGrid" class="calendar-grid"></div>
           </section>
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <p class="section-label">Performance</p>
+                <h2>Equity And Daily P/L</h2>
+              </div>
+            </div>
+            <div class="performance-grid">
+              <div class="chart-board">
+                <div class="chart-board-head">
+                  <span>Equity Curve</span>
+                </div>
+                <canvas id="equityCurveCanvas" class="mini-chart-canvas performance-canvas" width="920" height="240"></canvas>
+              </div>
+              <div class="chart-board">
+                <div class="chart-board-head">
+                  <span>Daily Realized P/L</span>
+                </div>
+                <canvas id="dailyPnlCanvas" class="mini-chart-canvas performance-canvas" width="920" height="240"></canvas>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section id="marketsWindow" class="window-pane">
@@ -141,6 +163,7 @@
             <button id="loadChartButton" class="button button-secondary" type="button">Load Chart</button>
             <button id="useMexcSymbolsButton" class="button button-ghost" type="button">Use My Sync Symbols</button>
             <button id="toggleLiveChartButton" class="button button-primary" type="button">Live On</button>
+            <button id="openChartModalButton" class="button button-ghost" type="button">Full Screen</button>
           </div>
           <div class="section-head quick-symbols-head">
             <div>
@@ -280,6 +303,15 @@
       </section>
 
       <aside class="sidebar">
+        <div class="window-tabs sidebar-tabs">
+          <button id="sidebarTabDay" class="button button-primary" type="button">Day</button>
+          <button id="sidebarTabNotes" class="button button-ghost" type="button">Notes</button>
+          <button id="sidebarTabMexc" class="button button-ghost" type="button">MEXC</button>
+          <button id="sidebarTabAi" class="button button-ghost" type="button">AI</button>
+          <button id="sidebarTabImport" class="button button-ghost" type="button">Import</button>
+        </div>
+
+        <section id="sidebarPaneDay" class="window-pane is-active">
         <section class="card">
           <div class="section-head">
             <div>
@@ -292,7 +324,9 @@
             Pick a day on the calendar to inspect activity.
           </div>
         </section>
+        </section>
 
+        <section id="sidebarPaneNotes" class="window-pane">
         <section class="card">
           <div class="section-head">
             <div>
@@ -318,7 +352,9 @@
             </div>
           </form>
         </section>
+        </section>
 
+        <section id="sidebarPaneImport" class="window-pane">
         <section class="card">
           <div class="section-head">
             <div>
@@ -335,7 +371,9 @@
             <button id="resetButton" class="button button-ghost">Clear Local Data</button>
           </div>
         </section>
+        </section>
 
+        <section id="sidebarPaneMexc" class="window-pane">
         <section class="card">
           <div class="section-head">
             <div>
@@ -389,7 +427,9 @@
             Add your own MEXC read-only API keys, then press <code>Sync MEXC</code>. By default the keys stay only for this browser session unless you explicitly remember them.
           </p>
         </section>
+        </section>
 
+        <section id="sidebarPaneAi" class="window-pane">
         <section class="card">
           <div class="section-head">
             <div>
@@ -424,8 +464,23 @@
             No analysis yet.
           </div>
         </section>
+        </section>
       </aside>
     </main>
+  </div>
+
+  <div id="chartModal" class="chart-modal is-hidden">
+    <div class="chart-modal-backdrop" id="chartModalBackdrop"></div>
+    <section class="chart-modal-panel">
+      <div class="section-head">
+        <div>
+          <p class="section-label">Full Screen Chart</p>
+          <h2 id="chartModalTitle">Live Market Chart</h2>
+        </div>
+        <button id="closeChartModalButton" class="button button-ghost" type="button">Close</button>
+      </div>
+      <canvas id="chartModalCanvas" class="market-chart-canvas chart-modal-canvas" width="1400" height="680"></canvas>
+    </section>
   </div>
 
   <script src="https://accounts.google.com/gsi/client" async defer></script>
