@@ -35,6 +35,8 @@ const state = {
   },
   currentWindow: "overview",
   currentSidebarPane: "day",
+  user: null,
+  profileLoaded: false,
 };
 
 const monthLabel = document.getElementById("monthLabel");
@@ -121,6 +123,7 @@ const chartPreviewWrap = document.getElementById("chartPreviewWrap");
 const chartPreviewImage = document.getElementById("chartPreviewImage");
 const aiChartStatus = document.getElementById("aiChartStatus");
 const aiChartResult = document.getElementById("aiChartResult");
+const installAppButton = document.getElementById("installAppButton");
 const fieldToggles = document.querySelectorAll(".field-toggle");
 const loginGate = document.getElementById("loginGate");
 const appShell = document.getElementById("appShell");
@@ -152,6 +155,8 @@ let marketChartPingTimer = null;
 let marketChartReconnectTimer = null;
 let marketChartSeries = [];
 let marketChartHoverBound = false;
+let profileSaveTimer = null;
+let installPromptEvent = null;
 const DEFAULT_MARKET_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT", "BNBUSDT"];
 
 bootstrap();
@@ -291,8 +296,20 @@ chartImageInput.addEventListener("change", handleChartPreview);
 openChartModalButton?.addEventListener("click", openChartModal);
 chartModalBackdrop?.addEventListener("click", closeChartModal);
 closeChartModalButton?.addEventListener("click", closeChartModal);
+installAppButton?.addEventListener("click", installPwaApp);
 fieldToggles.forEach((button) => {
   button.addEventListener("click", () => toggleSecretField(button));
+});
+
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  installPromptEvent = event;
+  installAppButton?.classList.remove("is-hidden");
+});
+
+window.addEventListener("appinstalled", () => {
+  installPromptEvent = null;
+  installAppButton?.classList.add("is-hidden");
 });
 
 mexcForm.addEventListener("submit", (event) => {
@@ -317,18 +334,47 @@ function renderWeekdays() {
 }
 
 async function bootstrap() {
+  registerServiceWorker();
   hydrateMexcForm();
   setDefaultSyncRange();
   const session = await restoreSession();
 
   if (session?.authenticated) {
+    state.user = session.user || null;
     showAuthenticatedApp(session.user);
+    await hydrateCloudProfile();
     initializeDashboard();
     return;
   }
 
   showLoginGate();
   initializeGoogleLogin();
+}
+
+async function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+
+  try {
+    await navigator.serviceWorker.register("./sw.js");
+  } catch {
+    // Ignore registration failures in unsupported or restricted environments.
+  }
+}
+
+async function installPwaApp() {
+  if (!installPromptEvent) {
+    syncStatus.textContent = "On iPhone, use Share then Add to Home Screen. On Android, use your browser install option if it appears.";
+    return;
+  }
+
+  installPromptEvent.prompt();
+  const choice = await installPromptEvent.userChoice.catch(() => null);
+  if (choice?.outcome === "accepted") {
+    installAppButton?.classList.add("is-hidden");
+  }
+  installPromptEvent = null;
 }
 
 function initializeDashboard() {
@@ -352,8 +398,8 @@ function initializeDashboard() {
   renderPerformanceCharts();
   loadMarketCatalog();
   loadMarketChart();
-  switchMainWindow("overview");
-  switchSidebarPane("day");
+  switchMainWindow(state.currentWindow || "overview");
+  switchSidebarPane(state.currentSidebarPane || "day");
 }
 
 function switchMainWindow(view) {
@@ -364,6 +410,7 @@ function switchMainWindow(view) {
   overviewWindowTab.className = isOverview ? "button button-primary" : "button button-ghost";
   marketsWindowTab.className = isOverview ? "button button-ghost" : "button button-primary";
   updateMobileDockState();
+  scheduleProfileSave();
 }
 
 function switchSidebarPane(view) {
@@ -384,6 +431,7 @@ function switchSidebarPane(view) {
     pane?.classList.toggle("is-active", active);
   });
   updateMobileDockState();
+  scheduleProfileSave();
 }
 
 function updateMobileDockState() {
@@ -644,6 +692,109 @@ async function restoreSession() {
   }
 }
 
+async function hydrateCloudProfile() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/profile`, {
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      return;
+    }
+
+    const payload = await response.json();
+    mergeCloudProfileIntoState(payload.profile || {});
+    persistEvents();
+    persistNotes(true);
+    persistFavorites(true);
+    persistAlerts(true);
+    persistSymbolJournal(true);
+    state.profileLoaded = true;
+  } catch {
+    state.profileLoaded = false;
+  }
+}
+
+function mergeCloudProfileIntoState(profile) {
+  const remoteEvents = Array.isArray(profile.events) ? profile.events.map(normalizeEvent).filter((entry) => entry.type === "trade") : [];
+  const localEvents = Array.isArray(state.events) ? state.events.map(normalizeEvent).filter((entry) => entry.type === "trade") : [];
+  state.events = mergeEvents(remoteEvents, localEvents);
+
+  state.notesByDate = {
+    ...(profile.notesByDate && typeof profile.notesByDate === "object" ? profile.notesByDate : {}),
+    ...state.notesByDate,
+  };
+
+  state.favorites = [...new Set([
+    ...(Array.isArray(profile.favorites) ? profile.favorites : []),
+    ...state.favorites,
+  ].map((entry) => String(entry || "").trim().toUpperCase()).filter(Boolean))];
+
+  const remoteAlerts = Array.isArray(profile.alerts) ? profile.alerts : [];
+  state.alerts = dedupeById([...remoteAlerts, ...state.alerts]);
+
+  state.symbolJournal = {
+    ...(profile.symbolJournal && typeof profile.symbolJournal === "object" ? profile.symbolJournal : {}),
+    ...state.symbolJournal,
+  };
+
+  const preferences = profile.preferences && typeof profile.preferences === "object" ? profile.preferences : {};
+  if (preferences.currentWindow === "overview" || preferences.currentWindow === "markets") {
+    state.currentWindow = preferences.currentWindow;
+  }
+  if (["day", "notes", "mexc", "ai", "import"].includes(preferences.currentSidebarPane)) {
+    state.currentSidebarPane = preferences.currentSidebarPane;
+  }
+  if (preferences.marketType === "spot" || preferences.marketType === "futures") {
+    state.marketType = preferences.marketType;
+  }
+  if (["favorites", "spot", "futures", "gainers", "losers", "volume"].includes(preferences.marketView)) {
+    state.marketView = preferences.marketView;
+  }
+}
+
+function scheduleProfileSave() {
+  if (!state.user) {
+    return;
+  }
+
+  if (profileSaveTimer) {
+    window.clearTimeout(profileSaveTimer);
+  }
+
+  profileSaveTimer = window.setTimeout(() => {
+    saveProfileToCloud().catch(() => {});
+  }, 600);
+}
+
+async function saveProfileToCloud() {
+  if (!state.user) {
+    return;
+  }
+
+  const profile = {
+    events: state.events,
+    notesByDate: state.notesByDate,
+    favorites: state.favorites,
+    alerts: state.alerts,
+    symbolJournal: state.symbolJournal,
+    preferences: {
+      currentWindow: state.currentWindow,
+      currentSidebarPane: state.currentSidebarPane,
+      marketType: state.marketType,
+      marketView: state.marketView,
+    },
+  };
+
+  await fetch(`${API_BASE_URL}/api/profile`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(profile),
+  });
+}
+
 function initializeGoogleLogin() {
   const clientId = document
     .querySelector('meta[name="google-signin-client_id"]')
@@ -701,7 +852,9 @@ async function handleGoogleCredential(response) {
       throw new Error(payload.error || "Google sign-in failed");
     }
 
+    state.user = payload.user || null;
     showAuthenticatedApp(payload.user);
+    await hydrateCloudProfile();
     initializeDashboard();
   } catch (error) {
     loginStatus.textContent = `Google login failed: ${error.message}`;
@@ -726,6 +879,8 @@ async function logout() {
       credentials: "same-origin",
     });
   } finally {
+    state.user = null;
+    state.profileLoaded = false;
     userEmail.textContent = "Not signed in";
     showLoginGate();
     loginStatus.textContent = "Signed out. Sign in with Google to continue.";
@@ -2259,8 +2414,11 @@ function setDefaultSyncRange() {
   }
 }
 
-function persistEvents() {
+function persistEvents(skipCloud = false) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.events));
+  if (!skipCloud) {
+    scheduleProfileSave();
+  }
 }
 
 function loadNotes() {
@@ -2272,8 +2430,11 @@ function loadNotes() {
   }
 }
 
-function persistNotes() {
+function persistNotes(skipCloud = false) {
   localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(state.notesByDate));
+  if (!skipCloud) {
+    scheduleProfileSave();
+  }
 }
 
 function loadFavorites() {
@@ -2285,8 +2446,11 @@ function loadFavorites() {
   }
 }
 
-function persistFavorites() {
+function persistFavorites(skipCloud = false) {
   localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(state.favorites));
+  if (!skipCloud) {
+    scheduleProfileSave();
+  }
 }
 
 function loadAlerts() {
@@ -2298,8 +2462,11 @@ function loadAlerts() {
   }
 }
 
-function persistAlerts() {
+function persistAlerts(skipCloud = false) {
   localStorage.setItem(ALERTS_STORAGE_KEY, JSON.stringify(state.alerts));
+  if (!skipCloud) {
+    scheduleProfileSave();
+  }
 }
 
 function loadSymbolJournal() {
@@ -2311,8 +2478,20 @@ function loadSymbolJournal() {
   }
 }
 
-function persistSymbolJournal() {
+function persistSymbolJournal(skipCloud = false) {
   localStorage.setItem(SYMBOL_JOURNAL_STORAGE_KEY, JSON.stringify(state.symbolJournal));
+  if (!skipCloud) {
+    scheduleProfileSave();
+  }
+}
+
+function dedupeById(items) {
+  const map = new Map();
+  items.forEach((item) => {
+    const key = String(item?.id || crypto.randomUUID?.() || Math.random());
+    map.set(key, item);
+  });
+  return [...map.values()];
 }
 
 function notifyAlertTriggered(alert, livePrice) {

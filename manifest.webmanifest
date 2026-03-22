@@ -1,0 +1,19 @@
+{
+  "name": "Crypto Activity Calendar",
+  "short_name": "CryptoCal",
+  "description": "Track crypto trades, charts, notes, and MEXC activity in one installable dashboard.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#07101b",
+  "theme_color": "#07101b",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -10,12 +10,16 @@ const OPENAI_API_KEY = String(process.env.OPENAI_API_KEY || "").trim();
 const OPENAI_MODEL = String(process.env.OPENAI_MODEL || "gpt-4.1").trim();
 const SESSION_COOKIE = "crypto_calendar_session";
 const sessions = new Map();
+const DATA_DIR = path.join(__dirname, ".data");
+const USER_DATA_DIR = path.join(DATA_DIR, "users");
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
 };
 
 const server = http.createServer(async (req, res) => {
@@ -44,6 +48,14 @@ const server = http.createServer(async (req, res) => {
     return handleLogout(req, res);
   }
 
+  if (req.method === "GET" && requestUrl.pathname === "/api/profile") {
+    return withAuthenticatedUser(req, res, (user) => handleProfileGet(res, user));
+  }
+
+  if (req.method === "POST" && requestUrl.pathname === "/api/profile") {
+    return withAuthenticatedUser(req, res, (user) => handleProfileSave(req, res, user));
+  }
+
   if (req.method === "POST" && requestUrl.pathname === "/api/mexc/activity") {
     return withAuthenticatedUser(req, res, () => handleMexcActivity(req, res));
   }
@@ -66,6 +78,8 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`Crypto calendar running at http://localhost:${PORT}`);
 });
+
+ensureDataDirectories();
 
 async function handleMexcActivity(req, res) {
   const body = await readJsonBody(req);
@@ -203,6 +217,27 @@ async function handleChartAnalysis(req, res) {
 
     const analysis = extractResponseText(payload);
     return sendJson(res, 200, { analysis });
+  } catch (error) {
+    return sendJson(res, 500, { error: error.message });
+  }
+}
+
+function handleProfileGet(res, user) {
+  try {
+    const profile = readUserProfile(user);
+    return sendJson(res, 200, { profile });
+  } catch (error) {
+    return sendJson(res, 500, { error: error.message });
+  }
+}
+
+async function handleProfileSave(req, res, user) {
+  const body = await readJsonBody(req);
+  const nextProfile = sanitizeProfilePayload(body);
+
+  try {
+    writeUserProfile(user, nextProfile);
+    return sendJson(res, 200, { ok: true });
   } catch (error) {
     return sendJson(res, 500, { error: error.message });
   }
@@ -605,6 +640,62 @@ function serveStatic(requestPath, res) {
     res.writeHead(200, { "Content-Type": mimeTypes[extension] || "text/plain; charset=utf-8" });
     res.end(injectRuntimeConfig(filePath, content));
   });
+}
+
+function ensureDataDirectories() {
+  fs.mkdirSync(USER_DATA_DIR, { recursive: true });
+}
+
+function readUserProfile(user) {
+  const filePath = getUserProfilePath(user);
+  if (!fs.existsSync(filePath)) {
+    return getDefaultProfile();
+  }
+
+  const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  return {
+    ...getDefaultProfile(),
+    ...sanitizeProfilePayload(parsed),
+  };
+}
+
+function writeUserProfile(user, profile) {
+  const filePath = getUserProfilePath(user);
+  const payload = {
+    ...getDefaultProfile(),
+    ...sanitizeProfilePayload(profile),
+    updatedAt: new Date().toISOString(),
+  };
+  fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
+}
+
+function getUserProfilePath(user) {
+  const userId = String(user?.sub || user?.email || "anonymous").replace(/[^a-zA-Z0-9_-]/g, "_");
+  return path.join(USER_DATA_DIR, `${userId}.json`);
+}
+
+function getDefaultProfile() {
+  return {
+    events: [],
+    notesByDate: {},
+    favorites: [],
+    alerts: [],
+    symbolJournal: {},
+    preferences: {},
+    updatedAt: null,
+  };
+}
+
+function sanitizeProfilePayload(profile) {
+  const source = profile && typeof profile === "object" ? profile : {};
+  return {
+    events: Array.isArray(source.events) ? source.events : [],
+    notesByDate: source.notesByDate && typeof source.notesByDate === "object" ? source.notesByDate : {},
+    favorites: Array.isArray(source.favorites) ? source.favorites : [],
+    alerts: Array.isArray(source.alerts) ? source.alerts : [],
+    symbolJournal: source.symbolJournal && typeof source.symbolJournal === "object" ? source.symbolJournal : {},
+    preferences: source.preferences && typeof source.preferences === "object" ? source.preferences : {},
+  };
 }
 
 function sendJson(res, status, payload) {

@@ -4,7 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Crypto Activity Calendar</title>
+  <meta name="theme-color" content="#07101b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Crypto Calendar" />
   <meta name="google-signin-client_id" content="%GOOGLE_CLIENT_ID%" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -40,6 +47,7 @@
           <span id="userEmail">Not signed in</span>
           <button id="logoutButton" class="button button-ghost">Log Out</button>
         </div>
+        <button id="installAppButton" class="button button-ghost is-hidden" type="button">Install App</button>
         <button id="todayButton" class="button button-primary">Jump to Today</button>
         <button id="syncButton" class="button button-secondary">Sync MEXC</button>
       </div>

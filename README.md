@@ -16,6 +16,7 @@ A deployable public dashboard for tracking crypto activity on a calendar, with u
 - MEXC keys default to session-only storage unless the user explicitly chooses to remember them
 - Trade-only sync can use an optional symbol list and date range
 - AI chart screenshot review section for educational analysis
+- Server-side saved profile data for signed-in users
 
 ## Files
 
@@ -66,6 +67,14 @@ node .\server.js
 - The backend uses the keys for that request and does not store them in files or memory after the request ends
 - The frontend keeps keys only for the current browser session by default unless the user checks `Remember keys on this device for later`
 - Users should create read-only API keys
+
+## Server-side saved profile
+
+- Signed-in users now get a lightweight saved profile on the server
+- Notes, alerts, favorites, journal entries, and synced trades can follow the same Google account across devices
+- Profile files are stored in `.data/users/`
+- Add `.data/` to `.gitignore` so private user data does not get committed
+- This is a simple file-backed persistence layer and is a good bridge before moving to a full database
 
 ## Important safety note
 

@@ -48,7 +48,8 @@ textarea {
 }
 
 .app-shell.is-hidden,
-.login-gate.is-hidden {
+.login-gate.is-hidden,
+.is-hidden {
   display: none;
 }
 
