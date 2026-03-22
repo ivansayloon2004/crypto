@@ -291,6 +291,44 @@ h1 {
   font-size: 0.92rem;
 }
 
+.secret-field {
+  position: relative;
+}
+
+.secret-field input {
+  padding-right: 82px;
+}
+
+.field-toggle {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.split-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.checkbox-row {
+  display: flex !important;
+  align-items: center;
+  gap: 10px !important;
+}
+
+.checkbox-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--gold);
+}
+
 input,
 select,
 textarea,
@@ -375,5 +413,9 @@ code {
   .event-chip {
     padding: 4px 8px;
     font-size: 0.72rem;
+  }
+
+  .split-fields {
+    grid-template-columns: 1fr;
   }
 }

@@ -43,6 +43,8 @@ async function handleMexcActivity(req, res) {
   const apiKey = String(body.apiKey || "").trim();
   const apiSecret = String(body.apiSecret || "").trim();
   const apiBase = String(body.apiBase || "https://api.mexc.com").trim();
+  const symbols = parseSymbols(body.symbols);
+  const timeRange = normalizeTimeRange(body.startDate, body.endDate);
 
   if (!apiKey || !apiSecret) {
     return sendJson(res, 400, {
@@ -63,6 +65,8 @@ async function handleMexcActivity(req, res) {
       apiBase,
       account,
       exchangeInfo,
+      symbols,
+      timeRange,
     });
 
     const activities = [
@@ -167,8 +171,12 @@ function mapBalances(payload) {
     }));
 }
 
-async function fetchTradeActivity({ apiKey, apiSecret, apiBase, account, exchangeInfo }) {
-  const candidateSymbols = getCandidateTradeSymbols(account, exchangeInfo).slice(0, 12);
+async function fetchTradeActivity({ apiKey, apiSecret, apiBase, account, exchangeInfo, symbols, timeRange }) {
+  const candidateSymbols = (symbols.length > 0 ? symbols : getCandidateTradeSymbols(account, exchangeInfo)).slice(0, 20);
+  if (candidateSymbols.length === 0) {
+    return [];
+  }
+
   const tradeResponses = await Promise.all(
     candidateSymbols.map((symbol) =>
       signedGet({
@@ -176,8 +184,8 @@ async function fetchTradeActivity({ apiKey, apiSecret, apiBase, account, exchang
         params: {
           symbol,
           limit: "100",
-          startTime: (Date.now() - 30 * 24 * 60 * 60 * 1000).toString(),
-          endTime: Date.now().toString(),
+          startTime: timeRange.startTime.toString(),
+          endTime: timeRange.endTime.toString(),
         },
         apiKey,
         apiSecret,
@@ -234,6 +242,50 @@ function mapTradeHistory(payload, symbol) {
     amount: Number(entry.qty || 0),
     notes: `${entry.isBuyer ? "Buy" : "Sell"} at ${entry.price} ${symbol} (${entry.isMaker ? "maker" : "taker"})`,
   }));
+}
+
+function parseSymbols(value) {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  return [...new Set(
+    value
+      .split(",")
+      .map((symbol) => symbol.trim().toUpperCase())
+      .filter(Boolean)
+  )];
+}
+
+function normalizeTimeRange(startDate, endDate) {
+  const now = new Date();
+  const defaultEnd = now.getTime();
+  const defaultStart = defaultEnd - 30 * 24 * 60 * 60 * 1000;
+  const parsedStart = parseDateOnly(startDate, "start");
+  const parsedEnd = parseDateOnly(endDate, "end");
+  let startTime = parsedStart ?? defaultStart;
+  let endTime = parsedEnd ?? defaultEnd;
+
+  if (endTime < startTime) {
+    [startTime, endTime] = [endTime, startTime];
+  }
+
+  const maxWindow = 30 * 24 * 60 * 60 * 1000;
+  if (endTime - startTime > maxWindow) {
+    startTime = endTime - maxWindow;
+  }
+
+  return { startTime, endTime };
+}
+
+function parseDateOnly(value, mode) {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+
+  const suffix = mode === "end" ? "T23:59:59.999Z" : "T00:00:00.000Z";
+  const parsed = new Date(`${value}${suffix}`);
+  return Number.isNaN(parsed.valueOf()) ? null : parsed.getTime();
 }
 
 function serveStatic(requestPath, res) {

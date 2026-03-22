@@ -11,6 +11,9 @@ A deployable public dashboard for tracking crypto activity on a calendar, with u
 - Local browser storage so entries persist on your machine
 - Public-friendly Node server that serves the site and proxies MEXC requests
 - Per-user MEXC connection flow using keys entered in the browser
+- API key and API secret fields are masked with show/hide toggles
+- MEXC keys default to session-only storage unless the user explicitly chooses to remember them
+- Trade sync can use an optional symbol list and date range
 
 ## Files
 
@@ -32,7 +35,8 @@ node .\server.js
 
 3. Open [http://localhost:3000](http://localhost:3000)
 4. Enter your MEXC read-only API key and secret in the app
-5. Press **Sync MEXC**
+5. Optionally enter symbols like `BTCUSDT,ETHUSDT` and a sync date range
+6. Press **Sync MEXC**
 
 ## Deploy publicly
 
@@ -56,6 +60,7 @@ node .\server.js
 - Each visitor enters their own MEXC API key and secret
 - The browser sends those credentials to your backend only when syncing
 - The backend uses the keys for that request and does not store them in files or memory after the request ends
+- The frontend keeps keys only for the current browser session by default unless the user checks `Remember keys on this device for later`
 - Users should create read-only API keys
 
 ## Important safety note
@@ -79,5 +84,5 @@ git push -u origin main
 
 - The backend currently pulls deposit history, withdrawal history, and a current balance snapshot.
 - The backend now also makes a best-effort pull of recent spot trade history using MEXC V3 `GET /api/v3/myTrades`.
-- MEXC's trade-history endpoint requires a `symbol` and only returns up to roughly the past 1 month, so this app infers likely symbols from your non-zero balances and supported exchange pairs. That means it may miss older trades or trades in assets you no longer hold.
+- MEXC's trade-history endpoint requires a `symbol` and only returns up to roughly the past 1 month, so this app now lets users specify symbols and a date window. If they leave symbols blank, the app infers likely symbols from non-zero balances and supported exchange pairs. That means it may still miss older trades or trades in assets no longer held.
 - Use read-only API keys whenever possible.

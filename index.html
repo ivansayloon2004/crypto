@@ -120,23 +120,47 @@
           <form id="mexcForm" class="activity-form">
             <label>
               API Key
-              <input type="text" name="apiKey" placeholder="Read-only MEXC API key" autocomplete="off" />
+              <div class="secret-field">
+                <input type="password" name="apiKey" placeholder="Read-only MEXC API key" autocomplete="off" />
+                <button type="button" class="field-toggle" data-target="apiKey">Show</button>
+              </div>
             </label>
             <label>
               API Secret
-              <input type="password" name="apiSecret" placeholder="MEXC API secret" autocomplete="off" />
+              <div class="secret-field">
+                <input type="password" name="apiSecret" placeholder="MEXC API secret" autocomplete="off" />
+                <button type="button" class="field-toggle" data-target="apiSecret">Show</button>
+              </div>
             </label>
             <label>
               API Base URL
               <input type="text" name="apiBase" value="https://api.mexc.com" />
             </label>
+            <label>
+              Spot Symbols
+              <input type="text" name="symbols" placeholder="BTCUSDT, ETHUSDT, SOLUSDT" autocomplete="off" />
+            </label>
+            <div class="split-fields">
+              <label>
+                Sync From
+                <input type="date" name="startDate" />
+              </label>
+              <label>
+                Sync To
+                <input type="date" name="endDate" />
+              </label>
+            </div>
+            <label class="checkbox-row">
+              <input type="checkbox" name="rememberKeys" />
+              <span>Remember keys on this device for later</span>
+            </label>
             <div class="stack-row">
-              <button type="submit" class="button button-secondary">Save Keys</button>
+              <button type="submit" class="button button-secondary">Save Sync Settings</button>
               <button type="button" id="clearKeysButton" class="button button-ghost">Clear</button>
             </div>
           </form>
           <p id="syncStatus" class="muted">
-            Add your own MEXC read-only API keys, then press <code>Sync MEXC</code>. Keys stay in your browser until you clear them.
+            Add your own MEXC read-only API keys, then press <code>Sync MEXC</code>. By default the keys stay only for this browser session unless you explicitly remember them.
           </p>
         </section>
       </aside>

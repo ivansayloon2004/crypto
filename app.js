@@ -1,5 +1,6 @@
 const STORAGE_KEY = "crypto-calendar-events-v1";
-const MEXC_STORAGE_KEY = "crypto-calendar-mexc-config-v1";
+const MEXC_STORAGE_KEY = "crypto-calendar-mexc-config-v2";
+const MEXC_SESSION_KEY = "crypto-calendar-mexc-session-v2";
 const API_BASE_URL = window.location.origin;
 const LEGACY_DEMO_NOTES = new Set([
   "Funding wallet top-up",
@@ -26,12 +27,14 @@ const syncStatus = document.getElementById("syncStatus");
 const activityForm = document.getElementById("activityForm");
 const jsonInput = document.getElementById("jsonInput");
 const mexcForm = document.getElementById("mexcForm");
+const fieldToggles = document.querySelectorAll(".field-toggle");
 
 renderWeekdays();
 renderCalendar();
 renderSelectedDate();
 activityForm.elements.date.value = state.selectedDate;
 hydrateMexcForm();
+setDefaultSyncRange();
 
 document.getElementById("prevMonthButton").addEventListener("click", () => {
   state.currentMonth = new Date(state.currentMonth.getFullYear(), state.currentMonth.getMonth() - 1, 1);
@@ -102,18 +105,15 @@ activityForm.addEventListener("submit", (event) => {
 
 document.getElementById("syncButton").addEventListener("click", syncMexc);
 document.getElementById("clearKeysButton").addEventListener("click", clearMexcKeys);
+fieldToggles.forEach((button) => {
+  button.addEventListener("click", () => toggleSecretField(button));
+});
 
 mexcForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const formData = new FormData(mexcForm);
-  const config = {
-    apiKey: String(formData.get("apiKey") || "").trim(),
-    apiSecret: String(formData.get("apiSecret") || "").trim(),
-    apiBase: String(formData.get("apiBase") || "https://api.mexc.com").trim(),
-  };
-
-  localStorage.setItem(MEXC_STORAGE_KEY, JSON.stringify(config));
-  syncStatus.textContent = config.apiKey ? "MEXC keys saved in this browser." : "Saved with empty keys. Add keys before syncing.";
+  const config = readMexcForm();
+  persistMexcConfig(config);
+  syncStatus.textContent = config.apiKey ? (config.rememberKeys ? "MEXC keys remembered on this device." : "MEXC keys saved for this browser session only.") : "Saved with empty keys. Add keys before syncing.";
 });
 
 function renderWeekdays() {
@@ -206,17 +206,26 @@ async function syncMexc() {
   syncStatus.textContent = "Syncing your MEXC deposits, withdrawals, balances, and recent trades...";
 
   try {
-    const config = loadMexcConfig();
+    const config = readMexcForm();
     if (!config.apiKey || !config.apiSecret) {
       throw new Error("Please add your MEXC API key and secret first");
     }
+
+    persistMexcConfig(config);
 
     const response = await fetch(`${API_BASE_URL}/api/mexc/activity`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(config),
+      body: JSON.stringify({
+        apiKey: config.apiKey,
+        apiSecret: config.apiSecret,
+        apiBase: config.apiBase,
+        symbols: config.symbols,
+        startDate: config.startDate,
+        endDate: config.endDate,
+      }),
     });
     const payload = await response.json();
 
@@ -262,19 +271,26 @@ function loadEvents() {
 }
 
 function loadMexcConfig() {
+  const sessionConfig = parseStoredConfig(sessionStorage.getItem(MEXC_SESSION_KEY));
+  const localConfig = parseStoredConfig(localStorage.getItem(MEXC_STORAGE_KEY));
+  const merged = { ...localConfig, ...sessionConfig };
+
+  return {
+    apiKey: String(merged.apiKey || "").trim(),
+    apiSecret: String(merged.apiSecret || "").trim(),
+    apiBase: String(merged.apiBase || "https://api.mexc.com").trim(),
+    symbols: String(merged.symbols || "").trim(),
+    startDate: String(merged.startDate || "").trim(),
+    endDate: String(merged.endDate || "").trim(),
+    rememberKeys: Boolean(localConfig.apiKey || localConfig.apiSecret),
+  };
+}
+
+function parseStoredConfig(rawValue) {
   try {
-    const parsed = JSON.parse(localStorage.getItem(MEXC_STORAGE_KEY) || "{}");
-    return {
-      apiKey: String(parsed.apiKey || "").trim(),
-      apiSecret: String(parsed.apiSecret || "").trim(),
-      apiBase: String(parsed.apiBase || "https://api.mexc.com").trim(),
-    };
+    return JSON.parse(rawValue || "{}");
   } catch {
-    return {
-      apiKey: "",
-      apiSecret: "",
-      apiBase: "https://api.mexc.com",
-    };
+    return {};
   }
 }
 
@@ -283,13 +299,83 @@ function hydrateMexcForm() {
   mexcForm.elements.apiKey.value = config.apiKey;
   mexcForm.elements.apiSecret.value = config.apiSecret;
   mexcForm.elements.apiBase.value = config.apiBase;
+  mexcForm.elements.symbols.value = config.symbols;
+  mexcForm.elements.startDate.value = config.startDate;
+  mexcForm.elements.endDate.value = config.endDate;
+  mexcForm.elements.rememberKeys.checked = config.rememberKeys;
 }
 
 function clearMexcKeys() {
   localStorage.removeItem(MEXC_STORAGE_KEY);
+  sessionStorage.removeItem(MEXC_SESSION_KEY);
   mexcForm.reset();
   mexcForm.elements.apiBase.value = "https://api.mexc.com";
-  syncStatus.textContent = "Stored MEXC keys cleared from this browser.";
+  setDefaultSyncRange();
+  resetSecretFieldStates();
+  syncStatus.textContent = "Stored MEXC keys and sync settings cleared from this browser.";
+}
+
+function readMexcForm() {
+  const formData = new FormData(mexcForm);
+  return {
+    apiKey: String(formData.get("apiKey") || "").trim(),
+    apiSecret: String(formData.get("apiSecret") || "").trim(),
+    apiBase: String(formData.get("apiBase") || "https://api.mexc.com").trim(),
+    symbols: String(formData.get("symbols") || "").trim().toUpperCase(),
+    startDate: String(formData.get("startDate") || "").trim(),
+    endDate: String(formData.get("endDate") || "").trim(),
+    rememberKeys: formData.get("rememberKeys") === "on",
+  };
+}
+
+function persistMexcConfig(config) {
+  const sharedConfig = {
+    apiBase: config.apiBase,
+    symbols: config.symbols,
+    startDate: config.startDate,
+    endDate: config.endDate,
+  };
+
+  sessionStorage.setItem(MEXC_SESSION_KEY, JSON.stringify({
+    ...sharedConfig,
+    apiKey: config.apiKey,
+    apiSecret: config.apiSecret,
+  }));
+
+  if (config.rememberKeys) {
+    localStorage.setItem(MEXC_STORAGE_KEY, JSON.stringify({
+      ...sharedConfig,
+      apiKey: config.apiKey,
+      apiSecret: config.apiSecret,
+    }));
+  } else {
+    localStorage.setItem(MEXC_STORAGE_KEY, JSON.stringify(sharedConfig));
+  }
+}
+
+function toggleSecretField(button) {
+  const fieldName = button.dataset.target;
+  const input = mexcForm.elements[fieldName];
+  const showValue = input.type === "password";
+  input.type = showValue ? "text" : "password";
+  button.textContent = showValue ? "Hide" : "Show";
+}
+
+function resetSecretFieldStates() {
+  fieldToggles.forEach((button) => {
+    const input = mexcForm.elements[button.dataset.target];
+    input.type = "password";
+    button.textContent = "Show";
+  });
+}
+
+function setDefaultSyncRange() {
+  if (!mexcForm.elements.startDate.value) {
+    mexcForm.elements.startDate.value = shiftDateKey(new Date(), -30);
+  }
+  if (!mexcForm.elements.endDate.value) {
+    mexcForm.elements.endDate.value = formatDateKey(new Date());
+  }
 }
 
 function persistEvents() {
@@ -328,6 +414,12 @@ function mergeEvents(existing, incoming) {
 
 function formatDateKey(date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function shiftDateKey(date, offsetDays) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + offsetDays);
+  return formatDateKey(next);
 }
 
 function formatAmount(amount) {
