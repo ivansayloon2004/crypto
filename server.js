@@ -6,6 +6,8 @@ const { URL } = require("url");
 
 const PORT = Number(process.env.PORT || 3000);
 const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || "").trim();
+const OPENAI_API_KEY = String(process.env.OPENAI_API_KEY || "").trim();
+const OPENAI_MODEL = String(process.env.OPENAI_MODEL || "gpt-4.1").trim();
 const SESSION_COOKIE = "crypto_calendar_session";
 const sessions = new Map();
 
@@ -44,6 +46,10 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && requestUrl.pathname === "/api/mexc/activity") {
     return withAuthenticatedUser(req, res, () => handleMexcActivity(req, res));
+  }
+
+  if (req.method === "POST" && requestUrl.pathname === "/api/ai/chart-analysis") {
+    return withAuthenticatedUser(req, res, () => handleChartAnalysis(req, res));
   }
 
   return serveStatic(requestUrl.pathname, res);
@@ -132,6 +138,63 @@ async function handleGoogleAuth(req, res) {
       authenticated: true,
       user,
     });
+  } catch (error) {
+    return sendJson(res, 500, { error: error.message });
+  }
+}
+
+async function handleChartAnalysis(req, res) {
+  if (!OPENAI_API_KEY) {
+    return sendJson(res, 500, { error: "Missing OPENAI_API_KEY on server" });
+  }
+
+  const body = await readJsonBody(req);
+  const imageDataUrl = String(body.imageDataUrl || "").trim();
+  const context = String(body.context || "").trim();
+
+  if (!imageDataUrl.startsWith("data:image/")) {
+    return sendJson(res, 400, { error: "Missing valid chart screenshot" });
+  }
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text:
+                  "You are a crypto chart review assistant. Analyze the uploaded chart screenshot and provide educational market observations only. Do not give direct personalized financial advice or commands to buy or sell. Return short sections titled: Market Structure, Key Levels, Bullish Scenario, Bearish Scenario, Risk Notes, and What To Watch Next. If indicators or timeframe are unclear, say so.",
+              },
+              {
+                type: "input_text",
+                text: context ? `User context: ${context}` : "User context: none provided.",
+              },
+              {
+                type: "input_image",
+                image_url: imageDataUrl,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error?.message || "OpenAI request failed");
+    }
+
+    const analysis = extractResponseText(payload);
+    return sendJson(res, 200, { analysis });
   } catch (error) {
     return sendJson(res, 500, { error: error.message });
   }
@@ -375,6 +438,27 @@ function serveStatic(requestPath, res) {
 function sendJson(res, status, payload) {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload));
+}
+
+function extractResponseText(payload) {
+  if (typeof payload.output_text === "string" && payload.output_text.trim()) {
+    return payload.output_text.trim();
+  }
+
+  const outputs = Array.isArray(payload.output) ? payload.output : [];
+  const parts = [];
+  outputs.forEach((item) => {
+    if (item.type !== "message" || !Array.isArray(item.content)) {
+      return;
+    }
+    item.content.forEach((content) => {
+      if (content.type === "output_text" && content.text) {
+        parts.push(content.text);
+      }
+    });
+  });
+
+  return parts.join("\n\n").trim();
 }
 
 function toDateKey(value) {

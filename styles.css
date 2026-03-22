@@ -453,6 +453,36 @@ textarea {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.chart-preview-wrap.is-hidden {
+  display: none;
+}
+
+.chart-preview-wrap {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.chart-preview-image {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  object-fit: contain;
+  background: #07111d;
+}
+
+.ai-result {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
 .day-note-card {
   padding: 14px;
   border: 1px solid rgba(247, 185, 85, 0.22);

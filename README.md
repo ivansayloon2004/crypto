@@ -15,6 +15,7 @@ A deployable public dashboard for tracking crypto activity on a calendar, with u
 - API key and API secret fields are masked with show/hide toggles
 - MEXC keys default to session-only storage unless the user explicitly chooses to remember them
 - Trade-only sync can use an optional symbol list and date range
+- AI chart screenshot review section for educational analysis
 
 ## Files
 
@@ -82,6 +83,17 @@ Example Render environment variable:
 ```text
 GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
 ```
+
+## AI chart review setup
+
+Add these Render environment variables:
+
+```text
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4.1
+```
+
+The chart review feature uses the OpenAI Responses API with image input. It is designed for educational chart interpretation and scenario analysis, not direct financial advice.
 
 ## GitHub push commands
 

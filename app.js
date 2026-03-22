@@ -31,6 +31,13 @@ const syncStatus = document.getElementById("syncStatus");
 const dayNoteForm = document.getElementById("dayNoteForm");
 const jsonInput = document.getElementById("jsonInput");
 const mexcForm = document.getElementById("mexcForm");
+const aiChartForm = document.getElementById("aiChartForm");
+const chartImageInput = document.getElementById("chartImageInput");
+const chartContextInput = document.getElementById("chartContextInput");
+const chartPreviewWrap = document.getElementById("chartPreviewWrap");
+const chartPreviewImage = document.getElementById("chartPreviewImage");
+const aiChartStatus = document.getElementById("aiChartStatus");
+const aiChartResult = document.getElementById("aiChartResult");
 const fieldToggles = document.querySelectorAll(".field-toggle");
 const loginGate = document.getElementById("loginGate");
 const appShell = document.getElementById("appShell");
@@ -132,6 +139,7 @@ document.getElementById("clearNoteButton").addEventListener("click", clearSelect
 document.getElementById("syncButton").addEventListener("click", syncMexc);
 document.getElementById("clearKeysButton").addEventListener("click", clearMexcKeys);
 document.getElementById("logoutButton").addEventListener("click", logout);
+chartImageInput.addEventListener("change", handleChartPreview);
 fieldToggles.forEach((button) => {
   button.addEventListener("click", () => toggleSecretField(button));
 });
@@ -142,6 +150,8 @@ mexcForm.addEventListener("submit", (event) => {
   persistMexcConfig(config);
   syncStatus.textContent = config.apiKey ? (config.rememberKeys ? "MEXC keys remembered on this device." : "MEXC keys saved for this browser session only.") : "Saved with empty keys. Add keys before syncing.";
 });
+
+aiChartForm.addEventListener("submit", analyzeChartScreenshot);
 
 function renderWeekdays() {
   const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -631,6 +641,68 @@ function resetSecretFieldStates() {
     const input = mexcForm.elements[button.dataset.target];
     input.type = "password";
     button.textContent = "Show";
+  });
+}
+
+function handleChartPreview() {
+  const file = chartImageInput.files?.[0];
+  if (!file) {
+    chartPreviewWrap.classList.add("is-hidden");
+    chartPreviewImage.removeAttribute("src");
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    chartPreviewImage.src = reader.result;
+    chartPreviewWrap.classList.remove("is-hidden");
+  };
+  reader.readAsDataURL(file);
+}
+
+async function analyzeChartScreenshot(event) {
+  event.preventDefault();
+  const file = chartImageInput.files?.[0];
+  if (!file) {
+    aiChartStatus.textContent = "Choose a chart screenshot first.";
+    return;
+  }
+
+  aiChartStatus.textContent = "Analyzing chart screenshot...";
+  aiChartResult.textContent = "Working on the chart review...";
+
+  try {
+    const imageDataUrl = await fileToDataUrl(file);
+    const response = await fetch(`${API_BASE_URL}/api/ai/chart-analysis`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        imageDataUrl,
+        context: chartContextInput.value.trim(),
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Chart analysis failed");
+    }
+
+    aiChartStatus.textContent = "Chart analysis ready.";
+    aiChartResult.textContent = payload.analysis || "No analysis returned.";
+  } catch (error) {
+    aiChartStatus.textContent = `AI chart review unavailable: ${error.message}`;
+    aiChartResult.textContent = "No analysis yet.";
+  }
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read the image file"));
+    reader.readAsDataURL(file);
   });
 }
 

@@ -206,6 +206,38 @@
             Add your own MEXC read-only API keys, then press <code>Sync MEXC</code>. By default the keys stay only for this browser session unless you explicitly remember them.
           </p>
         </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="section-label">AI Review</p>
+              <h2>Chart Screenshot Analyzer</h2>
+            </div>
+          </div>
+          <p class="muted">
+            Upload a chart screenshot and get AI observations, key levels, bullish and bearish scenarios, and risk notes. It will not give direct financial advice.
+          </p>
+          <form id="aiChartForm" class="activity-form">
+            <label>
+              Chart Screenshot
+              <input id="chartImageInput" type="file" accept="image/png,image/jpeg,image/webp" />
+            </label>
+            <label>
+              Context
+              <textarea id="chartContextInput" rows="3" placeholder="BTCUSDT 4H, looking at breakout retest after CPI move"></textarea>
+            </label>
+            <button type="submit" class="button button-secondary">Analyze Chart</button>
+          </form>
+          <div id="chartPreviewWrap" class="chart-preview-wrap is-hidden">
+            <img id="chartPreviewImage" class="chart-preview-image" alt="Chart preview" />
+          </div>
+          <div id="aiChartStatus" class="muted">
+            Add your OpenAI API key on the server to enable chart analysis.
+          </div>
+          <div id="aiChartResult" class="ai-result empty-state">
+            No analysis yet.
+          </div>
+        </section>
       </aside>
     </main>
   </div>
