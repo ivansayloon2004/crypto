@@ -183,7 +183,7 @@
             <article class="card stat-card">
               <p class="section-label">Win Rate</p>
               <h2 id="statWinRate">0%</h2>
-              <p id="statWinRateSub" class="muted">Based on realized winning sells</p>
+              <p id="statWinRateSub" class="muted">Based on realized winning close trades</p>
             </article>
             <article class="card stat-card">
               <p class="section-label">Best Day</p>
@@ -713,7 +713,11 @@
               Spot Symbols
               <input type="text" name="symbols" placeholder="BTCUSDT, ETHUSDT, SOLUSDT" autocomplete="off" />
             </label>
-            <p class="muted">Only spot trade history is synced. If you already closed a losing pair, enter the exact spot symbol here so it does not get missed.</p>
+            <p class="muted">If you already closed a losing spot pair, enter the exact spot symbol here so it does not get missed.</p>
+            <label class="checkbox-row">
+              <input type="checkbox" name="includeFutures" checked />
+              <span>Include futures trade history in sync too</span>
+            </label>
             <div class="split-fields">
               <label>
                 Sync From
@@ -748,7 +752,7 @@
             </div>
           </form>
           <p id="syncStatus" class="muted">
-            Add your own MEXC read-only API keys, then press <code>Sync MEXC</code>. Only spot trades are synced, and a blank symbol box checks pairs inferred from your current balances. By default the keys stay only for this browser session unless you explicitly remember them.
+            Add your own MEXC read-only API keys, then press <code>Sync MEXC</code>. Spot trades sync from the exact spot symbols you enter or from inferred current balances, and futures history can sync too when the futures checkbox stays on. By default the keys stay only for this browser session unless you explicitly remember them.
           </p>
         </section>
         </section>

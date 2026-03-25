@@ -1518,7 +1518,7 @@ async function runMonthlyAiReview() {
 }
 
 function buildMonthlyAiPayload(monthEvents) {
-  const sells = monthEvents.filter((entry) => entry.side === "sell");
+  const sells = monthEvents.filter(isClosingTrade);
   const wins = sells.filter((entry) => getRealizedPnl(entry) > 0).length;
   const totalRealized = monthEvents.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
   const bySymbol = [...groupTradesBySymbol(monthEvents).values()].map((group) => ({
@@ -2184,11 +2184,14 @@ function renderSymbolAnalytics() {
   }
 
   const symbol = String(marketSymbolInput?.value || "").trim().toUpperCase();
-  const trades = state.events.filter((entry) => String(entry.asset || "").toUpperCase() === normalizeChartSymbol(symbol, "spot"));
+  const normalizedSymbol = normalizeChartSymbol(symbol, state.marketType);
+  const trades = state.events.filter((entry) => String(entry.asset || "").toUpperCase() === normalizedSymbol);
   const realized = trades.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
-  const sells = trades.filter((entry) => entry.side === "sell");
+  const sells = trades.filter(isClosingTrade);
   const wins = sells.filter((entry) => getRealizedPnl(entry) > 0).length;
-  const position = state.openPositions.find((entry) => entry.symbol === normalizeChartSymbol(symbol, "spot"));
+  const position = state.marketType === "futures"
+    ? null
+    : state.openPositions.find((entry) => entry.symbol === normalizedSymbol);
 
   symbolAnalytics.innerHTML = [
     ["Trades", String(trades.length)],
@@ -2562,7 +2565,7 @@ function renderStrategyLab() {
     const bucket = strategyMap.get(strategy) || { strategy, trades: [], realized: 0, sells: 0, wins: 0 };
     bucket.trades.push(entry);
     bucket.realized += getRealizedPnl(entry);
-    if (entry.side === "sell") {
+    if (isClosingTrade(entry)) {
       bucket.sells += 1;
       if (getRealizedPnl(entry) > 0) {
         bucket.wins += 1;
@@ -2694,7 +2697,7 @@ function inferStrategy(entry) {
 }
 
 function inferTradeStoryHeadline(entry) {
-  const side = String(entry.side || "trade").toUpperCase();
+  const side = String(getTradeSideLabel(entry) || "trade").toUpperCase();
   const strategy = inferStrategy(entry);
   return `${side} ${entry.asset} using ${strategy}`;
 }
@@ -2706,7 +2709,7 @@ function renderSymbolPerformanceTable() {
 
   const rows = [...groupTradesBySymbol(getFilteredEvents()).values()]
     .map((group) => {
-      const sells = group.trades.filter((entry) => entry.side === "sell");
+      const sells = group.trades.filter(isClosingTrade);
       const wins = sells.filter((entry) => getRealizedPnl(entry) > 0).length;
       return {
         symbol: group.symbol,
@@ -3649,6 +3652,7 @@ function renderTradeReplay() {
     });
   });
   tradeReplayPanel.querySelector("[data-replay-open]")?.addEventListener("click", () => {
+    switchMarketView(isFuturesTrade(entry) ? "futures" : "spot");
     marketSymbolInput.value = String(entry.asset || "").toUpperCase();
     switchMainWindow("markets");
     loadMarketChart();
@@ -3871,7 +3875,7 @@ function normalizeEvent(entry) {
     realizedPnl: Number(entry.realizedPnl || 0),
     marketType: String(entry.marketType || (String(entry.asset || "").includes("_") ? "futures" : "spot")).toLowerCase(),
     displaySide: String(entry.displaySide || entry.side || "").trim(),
-    isClosingTrade: Boolean(entry.isClosingTrade),
+    isClosingTrade: typeof entry.isClosingTrade === "boolean" ? entry.isClosingTrade : null,
     notes: String(entry.notes || "").trim(),
   };
 }
@@ -3935,7 +3939,7 @@ function isFuturesTrade(entry) {
 }
 
 function isClosingTrade(entry) {
-  if (typeof entry?.isClosingTrade === "boolean") {
+  if (entry?.isClosingTrade === true || entry?.isClosingTrade === false) {
     return entry.isClosingTrade;
   }
   return !isFuturesTrade(entry) && String(entry?.side || "").toLowerCase() === "sell";
@@ -4281,6 +4285,11 @@ function recalculateRealizedPnl() {
   });
 
   ordered.forEach((entry) => {
+    if (isFuturesTrade(entry)) {
+      entry.realizedPnl = Number(entry.realizedPnl || 0);
+      return;
+    }
+
     const symbolKey = String(entry.asset || "UNKNOWN").toUpperCase();
     const baseAsset = String(entry.baseAsset || symbolKey).toUpperCase();
     const feeAsset = String(entry.feeAsset || "").toUpperCase();
