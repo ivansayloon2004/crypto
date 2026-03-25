@@ -708,8 +708,9 @@ function renderStats() {
   const events = getFilteredEvents();
   const realizedTotal = events.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
   const unrealizedTotal = state.openPositions.reduce((sum, entry) => sum + entry.unrealizedPnl, 0);
-  const realizedTrades = events.filter((entry) => entry.side === "sell");
+  const realizedTrades = events.filter(isClosingTrade);
   const winners = realizedTrades.filter((entry) => getRealizedPnl(entry) > 0);
+  const openingTrades = events.filter(isOpeningTrade);
   const visibleMonthKey = `${state.currentMonth.getFullYear()}-${String(state.currentMonth.getMonth() + 1).padStart(2, "0")}`;
   const monthEvents = events.filter((entry) => entry.date.startsWith(visibleMonthKey));
   const monthPnl = monthEvents.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
@@ -728,13 +729,13 @@ function renderStats() {
 
   statRealizedPnl.textContent = formatSignedMoney(realizedTotal);
   statRealizedPnl.className = realizedTotal > 0 ? "positive-text" : realizedTotal < 0 ? "negative-text" : "";
-  statRealizedPnlSub.textContent = `${realizedTrades.length} realized sell trade${realizedTrades.length === 1 ? "" : "s"}`;
+  statRealizedPnlSub.textContent = `${realizedTrades.length} realized close trade${realizedTrades.length === 1 ? "" : "s"}`;
 
   statTradeCount.textContent = String(events.length);
-  statTradeCountSub.textContent = `${events.filter((entry) => entry.side === "buy").length} buys, ${events.filter((entry) => entry.side === "sell").length} sells`;
+  statTradeCountSub.textContent = `${openingTrades.length} opening, ${realizedTrades.length} closing`;
 
   statWinRate.textContent = `${winRate.toFixed(1)}%`;
-  statWinRateSub.textContent = `${winners.length} winning sell${winners.length === 1 ? "" : "s"} out of ${realizedTrades.length}`;
+  statWinRateSub.textContent = `${winners.length} winning close${winners.length === 1 ? "" : "s"} out of ${realizedTrades.length}`;
 
   statBestDay.textContent = bestDay ? formatShortDate(bestDay.date) : "None";
   statBestDaySub.textContent = bestDay ? formatSignedMoney(bestDay.pnl) : "No realized results yet";
@@ -837,7 +838,7 @@ function renderSelectedDate() {
         <article class="event-item ${entry.type}">
           <div class="event-header-row">
             <div class="event-meta">
-              <span class="event-type">${entry.side ? escapeHtml(entry.side) : "trade"}</span>
+              <span class="event-type">${escapeHtml(getTradeSideLabel(entry))}</span>
               <span>${escapeHtml(entry.asset)}</span>
             </div>
             <button class="delete-button" data-id="${escapeHtml(entry.id)}" type="button">Delete</button>
@@ -889,7 +890,7 @@ function getHeatmapClass(dayTotal) {
 }
 
 async function syncMexc() {
-  syncStatus.textContent = "Syncing only your MEXC trades...";
+  syncStatus.textContent = "Syncing your MEXC spot and futures trades...";
 
   try {
     const config = readMexcForm();
@@ -911,6 +912,7 @@ async function syncMexc() {
         symbols: config.symbols,
         startDate: config.startDate,
         endDate: config.endDate,
+        includeFutures: config.includeFutures,
       }),
     });
     const payload = await response.json();
@@ -1217,6 +1219,7 @@ function loadMexcConfig() {
     symbols: String(merged.symbols || "").trim(),
     startDate: String(merged.startDate || "").trim(),
     endDate: String(merged.endDate || "").trim(),
+    includeFutures: merged.includeFutures !== false,
     fiatCurrency: DEFAULT_FIAT_CURRENCY,
     usdtToPhpRate: Number(merged.usdtToPhpRate || DEFAULT_USDT_TO_PHP_RATE) > 0
       ? Number(merged.usdtToPhpRate || DEFAULT_USDT_TO_PHP_RATE)
@@ -1241,6 +1244,9 @@ function hydrateMexcForm() {
   mexcForm.elements.symbols.value = config.symbols;
   mexcForm.elements.startDate.value = config.startDate;
   mexcForm.elements.endDate.value = config.endDate;
+  if (mexcForm.elements.includeFutures) {
+    mexcForm.elements.includeFutures.checked = config.includeFutures;
+  }
   if (mexcForm.elements.fiatCurrency) {
     mexcForm.elements.fiatCurrency.value = config.fiatCurrency;
   }
@@ -1260,6 +1266,9 @@ function clearMexcKeys() {
   sessionStorage.removeItem(MEXC_SESSION_KEY);
   mexcForm.reset();
   mexcForm.elements.apiBase.value = "https://api.mexc.com";
+  if (mexcForm.elements.includeFutures) {
+    mexcForm.elements.includeFutures.checked = true;
+  }
   if (mexcForm.elements.fiatCurrency) {
     mexcForm.elements.fiatCurrency.value = DEFAULT_FIAT_CURRENCY;
   }
@@ -1291,6 +1300,7 @@ function clearSelectedDayNote() {
 
 function readMexcForm() {
   const formData = new FormData(mexcForm);
+  const includeFuturesFieldExists = Boolean(mexcForm?.elements?.includeFutures);
   return {
     apiKey: String(formData.get("apiKey") || "").trim(),
     apiSecret: String(formData.get("apiSecret") || "").trim(),
@@ -1298,6 +1308,7 @@ function readMexcForm() {
     symbols: String(formData.get("symbols") || "").trim().toUpperCase(),
     startDate: String(formData.get("startDate") || "").trim(),
     endDate: String(formData.get("endDate") || "").trim(),
+    includeFutures: includeFuturesFieldExists ? formData.get("includeFutures") === "on" : true,
     fiatCurrency: DEFAULT_FIAT_CURRENCY,
     usdtToPhpRate: Number(formData.get("usdtToPhpRate") || DEFAULT_USDT_TO_PHP_RATE) > 0
       ? Number(formData.get("usdtToPhpRate") || DEFAULT_USDT_TO_PHP_RATE)
@@ -1312,6 +1323,7 @@ function persistMexcConfig(config) {
     symbols: config.symbols,
     startDate: config.startDate,
     endDate: config.endDate,
+    includeFutures: config.includeFutures !== false,
     fiatCurrency: DEFAULT_FIAT_CURRENCY,
     usdtToPhpRate: Number(config.usdtToPhpRate || DEFAULT_USDT_TO_PHP_RATE) > 0
       ? Number(config.usdtToPhpRate || DEFAULT_USDT_TO_PHP_RATE)
@@ -2327,20 +2339,20 @@ function renderMonthlyReview() {
 
   const monthKey = `${state.currentMonth.getFullYear()}-${String(state.currentMonth.getMonth() + 1).padStart(2, "0")}`;
   const monthEvents = getFilteredEvents().filter((entry) => entry.date.startsWith(monthKey));
-  const sells = monthEvents.filter((entry) => entry.side === "sell");
+  const closes = monthEvents.filter(isClosingTrade);
   const realized = monthEvents.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
-  const wins = sells.filter((entry) => getRealizedPnl(entry) > 0).length;
+  const wins = closes.filter((entry) => getRealizedPnl(entry) > 0).length;
   const dayTotals = getDailyRealizedTotals(monthEvents);
   const bestDay = dayTotals.length > 0 ? dayTotals.reduce((best, entry) => (entry.pnl > best.pnl ? entry : best)) : null;
   const worstDay = dayTotals.length > 0 ? dayTotals.reduce((worst, entry) => (entry.pnl < worst.pnl ? entry : worst)) : null;
-  const avgSell = sells.length > 0 ? sells.reduce((sum, entry) => sum + getRealizedPnl(entry), 0) / sells.length : 0;
+  const avgClose = closes.length > 0 ? closes.reduce((sum, entry) => sum + getRealizedPnl(entry), 0) / closes.length : 0;
 
   monthlyReviewGrid.innerHTML = [
     ["Month Realized", formatSignedMoney(realized), realized],
-    ["Sell Win Rate", sells.length > 0 ? `${((wins / sells.length) * 100).toFixed(1)}%` : "0.0%", sells.length > 0 ? wins / sells.length : 0],
+    ["Close Win Rate", closes.length > 0 ? `${((wins / closes.length) * 100).toFixed(1)}%` : "0.0%", closes.length > 0 ? wins / closes.length : 0],
     ["Best Day", bestDay ? `${formatShortDate(bestDay.date)} ${formatSignedMoney(bestDay.pnl)}` : "No realized day yet", bestDay?.pnl || 0],
     ["Worst Day", worstDay ? `${formatShortDate(worstDay.date)} ${formatSignedMoney(worstDay.pnl)}` : "No losing day yet", worstDay?.pnl || 0],
-    ["Sell Average", formatSignedMoney(avgSell), avgSell],
+    ["Close Average", formatSignedMoney(avgClose), avgClose],
     ["Trade Count", `${monthEvents.length} trades`, monthEvents.length],
   ].map(([label, value, numeric]) => `
     <article class="analytics-item">
@@ -2357,8 +2369,8 @@ function renderSymbolPnlTable() {
 
   const rows = [...groupTradesBySymbol(getFilteredEvents()).values()]
     .map((group) => {
-      const sellCount = group.trades.filter((entry) => entry.side === "sell").length;
-      const winCount = group.trades.filter((entry) => entry.side === "sell" && getRealizedPnl(entry) > 0).length;
+      const sellCount = group.trades.filter(isClosingTrade).length;
+      const winCount = group.trades.filter((entry) => isClosingTrade(entry) && getRealizedPnl(entry) > 0).length;
       return {
         symbol: group.symbol,
         realized: group.trades.reduce((sum, entry) => sum + getRealizedPnl(entry), 0),
@@ -2422,7 +2434,7 @@ function renderTradeHistoryTable() {
           <span class="muted">${formatAmount(entry.amount)} @ ${formatMoney(entry.price)}</span>
         </span>
         <span>
-          <span class="event-type">${escapeHtml(entry.side || "trade")}</span><br />
+          <span class="event-type">${escapeHtml(getTradeSideLabel(entry))}</span><br />
           <span class="muted">${formatMoney(entry.quoteAmount)}</span>
         </span>
         <span class="${getRealizedPnl(entry) > 0 ? "positive-text" : getRealizedPnl(entry) < 0 ? "negative-text" : ""}">
@@ -2483,13 +2495,13 @@ function renderRiskMetrics() {
   }
 
   const events = getFilteredEvents();
-  const sells = events.filter((entry) => entry.side === "sell");
+  const sells = events.filter(isClosingTrade);
   const wins = sells.filter((entry) => getRealizedPnl(entry) > 0).map((entry) => getRealizedPnl(entry));
   const losses = sells.filter((entry) => getRealizedPnl(entry) < 0).map((entry) => Math.abs(getRealizedPnl(entry)));
   const avgWin = wins.length ? wins.reduce((sum, value) => sum + value, 0) / wins.length : 0;
   const avgLoss = losses.length ? losses.reduce((sum, value) => sum + value, 0) / losses.length : 0;
   const profitFactor = avgLoss > 0 ? wins.reduce((sum, value) => sum + value, 0) / losses.reduce((sum, value) => sum + value, 0) : 0;
-  const expectancy = sells.length > 0 ? events.filter((entry) => entry.side === "sell").reduce((sum, entry) => sum + getRealizedPnl(entry), 0) / sells.length : 0;
+  const expectancy = sells.length > 0 ? sells.reduce((sum, entry) => sum + getRealizedPnl(entry), 0) / sells.length : 0;
   const drawdown = calculateMaxDrawdown(events);
   const streaks = calculateWinLossStreaks(sells);
 
@@ -2599,7 +2611,7 @@ function renderRedFlags() {
   }
 
   const events = getFilteredEvents();
-  const sells = events.filter((entry) => entry.side === "sell");
+  const sells = events.filter(isClosingTrade);
   const losses = sells.filter((entry) => getRealizedPnl(entry) < 0);
   const worstLoss = losses.length > 0 ? losses.reduce((worst, entry) => getRealizedPnl(entry) < getRealizedPnl(worst) ? entry : worst) : null;
   const dayCounts = new Map();
@@ -3615,7 +3627,7 @@ function renderTradeReplay() {
         <span class="event-type">replay</span>
         <span>${index + 1} / ${events.length}</span>
       </div>
-      <h3>${escapeHtml(entry.asset)} ${escapeHtml(entry.side || "trade")}</h3>
+          <h3>${escapeHtml(entry.asset)} ${escapeHtml(getTradeSideLabel(entry))}</h3>
       <div class="trade-stats">
         <span>Time: ${escapeHtml(formatDateTime(Date.parse(entry.executedAt || `${entry.date}T00:00:00Z`) || 0))}</span>
         <span>Qty: ${formatAmount(entry.amount)}</span>
@@ -3857,6 +3869,9 @@ function normalizeEvent(entry) {
     isMaker: Boolean(entry.isMaker),
     executedAt: String(entry.executedAt || entry.date || ""),
     realizedPnl: Number(entry.realizedPnl || 0),
+    marketType: String(entry.marketType || (String(entry.asset || "").includes("_") ? "futures" : "spot")).toLowerCase(),
+    displaySide: String(entry.displaySide || entry.side || "").trim(),
+    isClosingTrade: Boolean(entry.isClosingTrade),
     notes: String(entry.notes || "").trim(),
   };
 }
@@ -3875,37 +3890,63 @@ function buildMexcSyncStatus(meta, tradeCount) {
   if (!meta || typeof meta !== "object") {
     return baseMessage;
   }
+  const messages = [baseMessage];
+  const spotMeta = meta.spot && typeof meta.spot === "object" ? meta.spot : null;
+  const futuresMeta = meta.futures && typeof meta.futures === "object" ? meta.futures : null;
 
-  const usedSymbols = Array.isArray(meta.usedSymbols)
-    ? meta.usedSymbols.map((symbol) => String(symbol || "").trim().toUpperCase()).filter(Boolean)
-    : [];
-  const symbolPreview = usedSymbols.length > 0
-    ? `${usedSymbols.slice(0, 4).join(", ")}${usedSymbols.length > 4 ? ", ..." : ""}`
-    : "";
-  const dateRange = meta.startDate && meta.endDate ? ` for ${meta.startDate} to ${meta.endDate}` : "";
-  const checkedSummary = usedSymbols.length > 0
-    ? ` Checked ${usedSymbols.length} spot symbol${usedSymbols.length === 1 ? "" : "s"}${dateRange}: ${symbolPreview}.`
-    : dateRange
-      ? ` Checked 0 spot symbols${dateRange}.`
+  if (spotMeta) {
+    const usedSymbols = Array.isArray(spotMeta.usedSymbols)
+      ? spotMeta.usedSymbols.map((symbol) => String(symbol || "").trim().toUpperCase()).filter(Boolean)
+      : [];
+    const symbolPreview = usedSymbols.length > 0
+      ? `${usedSymbols.slice(0, 4).join(", ")}${usedSymbols.length > 4 ? ", ..." : ""}`
       : "";
+    const dateRange = spotMeta.startDate && spotMeta.endDate ? ` for ${spotMeta.startDate} to ${spotMeta.endDate}` : "";
 
-  if (tradeCount === 0 && usedSymbols.length === 0) {
-    return `${baseMessage} No spot symbols were checked because the symbol box is empty and no current-balance spot pairs could be inferred. Enter the exact spot pair, then sync again.`;
+    if (spotMeta.error) {
+      messages.push(`Spot sync skipped: ${spotMeta.error}.`);
+    } else if (usedSymbols.length > 0) {
+      messages.push(`Checked ${usedSymbols.length} spot symbol${usedSymbols.length === 1 ? "" : "s"}${dateRange}: ${symbolPreview}.`);
+      if (tradeCount === 0 && spotMeta.inferredSymbols) {
+        messages.push("Spot symbols were inferred from your current spot balances, so already-closed spot pairs may be missed unless you type the exact spot symbol.");
+      }
+    }
   }
 
-  if (tradeCount === 0 && meta.inferredSymbols) {
-    return `${baseMessage}${checkedSummary} The symbol box is empty, so the app only checked pairs inferred from your current spot balances. Closed losing trades in symbols you no longer hold will not appear unless you enter the exact spot symbols and widen the date range if needed.`;
+  if (futuresMeta?.enabled) {
+    if (futuresMeta.error) {
+      messages.push(`Futures sync skipped: ${futuresMeta.error}.`);
+    } else {
+      const dateRange = futuresMeta.startDate && futuresMeta.endDate ? `${futuresMeta.startDate} to ${futuresMeta.endDate}` : "your selected date range";
+      const futuresCount = Number(futuresMeta.tradeCount || 0);
+      messages.push(`Checked futures history for ${dateRange} and found ${futuresCount} futures trade${futuresCount === 1 ? "" : "s"}.`);
+    }
   }
 
   if (tradeCount === 0) {
-    return `${baseMessage}${checkedSummary} If the trade still does not appear, confirm the exact spot symbol and make sure the Sync From and Sync To dates include the trade date.`;
+    messages.push("If the missing trade still does not appear, widen the sync dates and sync again.");
   }
 
-  if (meta.inferredSymbols) {
-    return `${baseMessage}${checkedSummary} Symbols were inferred from your current spot balances. Add exact spot symbols if you need already-closed pairs to show up reliably.`;
-  }
+  return messages.join(" ");
+}
 
-  return `${baseMessage}${checkedSummary}`;
+function isFuturesTrade(entry) {
+  return String(entry?.marketType || "").toLowerCase() === "futures" || String(entry?.asset || "").includes("_");
+}
+
+function isClosingTrade(entry) {
+  if (typeof entry?.isClosingTrade === "boolean") {
+    return entry.isClosingTrade;
+  }
+  return !isFuturesTrade(entry) && String(entry?.side || "").toLowerCase() === "sell";
+}
+
+function isOpeningTrade(entry) {
+  return !isClosingTrade(entry);
+}
+
+function getTradeSideLabel(entry) {
+  return String(entry?.displaySide || entry?.side || "trade");
 }
 
 function focusMostRecentSyncedTrade(events) {

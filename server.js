@@ -589,6 +589,33 @@ async function signedGet({ endpoint, params, apiKey, apiSecret, apiBase }) {
   return payload;
 }
 
+async function futuresPrivateGet({ endpoint, params, apiKey, apiSecret, apiBase = "https://contract.mexc.com" }) {
+  const requestTime = Date.now().toString();
+  const requestParam = buildFuturesRequestParam(params);
+  const signature = crypto
+    .createHmac("sha256", apiSecret)
+    .update(`${apiKey}${requestTime}${requestParam}`)
+    .digest("hex");
+  const requestUrl = requestParam ? `${apiBase}${endpoint}?${requestParam}` : `${apiBase}${endpoint}`;
+
+  const response = await fetch(requestUrl, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      ApiKey: apiKey,
+      "Request-Time": requestTime,
+      Signature: signature,
+    },
+  });
+
+  const payload = await response.json();
+  if (!response.ok || payload?.success === false || Number(payload?.code ?? 0) !== 0) {
+    throw new Error(payload?.message || payload?.error || `MEXC futures request failed with ${response.status}`);
+  }
+
+  return payload.data;
+}
+
 async function publicGet({ endpoint, apiBase }) {
   const response = await fetch(`${apiBase}${endpoint}`, {
     method: "GET",
@@ -637,6 +664,52 @@ async function fetchTradeActivity({ apiKey, apiSecret, apiBase, account, exchang
   return {
     activities: tradeResponses.flatMap((payload, index) => mapTradeHistory(payload, candidateSymbols[index])),
     meta,
+  };
+}
+
+async function fetchFuturesTradeActivity({ apiKey, apiSecret, timeRange }) {
+  const pageSize = 100;
+  const maxPages = 5;
+  const rows = [];
+
+  for (let pageNum = 1; pageNum <= maxPages; pageNum += 1) {
+    const payload = await futuresPrivateGet({
+      endpoint: "/api/v1/private/order/list/history_orders",
+      params: {
+        states: "3",
+        start_time: String(timeRange.startTime),
+        end_time: String(timeRange.endTime),
+        page_num: String(pageNum),
+        page_size: String(pageSize),
+      },
+      apiKey,
+      apiSecret,
+    });
+
+    const resultList = extractFuturesRows(payload);
+    rows.push(...resultList);
+
+    const totalPages = Number(payload?.totalPage || payload?.totalPages || 1);
+    if (resultList.length < pageSize || pageNum >= totalPages) {
+      break;
+    }
+  }
+
+  const activities = rows
+    .filter((entry) => Number(entry.dealVol || entry.vol || 0) > 0)
+    .map(mapFuturesHistoryOrder);
+  const usedSymbols = [...new Set(activities.map((entry) => String(entry.asset || "").trim().toUpperCase()).filter(Boolean))];
+
+  return {
+    activities,
+    meta: {
+      enabled: true,
+      usedSymbols,
+      tradeCount: activities.length,
+      allContracts: true,
+      startDate: toDateKey(timeRange.startTime),
+      endDate: toDateKey(timeRange.endTime),
+    },
   };
 }
 
@@ -710,6 +783,71 @@ function mapTradeHistory(payload, symbol) {
     isMaker: Boolean(entry.isMaker),
     notes: `${entry.isBuyer ? "Buy" : "Sell"} at ${entry.price} ${symbol} (${entry.isMaker ? "maker" : "taker"})`,
   }));
+}
+
+function extractFuturesRows(payload) {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (Array.isArray(payload?.resultList)) {
+    return payload.resultList;
+  }
+
+  if (Array.isArray(payload?.list)) {
+    return payload.list;
+  }
+
+  return [];
+}
+
+function mapFuturesHistoryOrder(entry) {
+  const sideCode = Number(entry?.side || 0);
+  const quantity = Number(entry?.dealVol || entry?.vol || 0);
+  const price = Number(entry?.dealAvgPrice || entry?.price || 0);
+  const fee = Math.abs(Number(entry?.takerFee || 0)) + Math.abs(Number(entry?.makerFee || 0));
+  const timestamp = Number(entry?.updateTime || entry?.createTime || Date.now());
+  const isClosingTrade = sideCode === 2 || sideCode === 4;
+
+  return {
+    id: entry.orderId || `futures-${entry.symbol}-${timestamp}`,
+    date: toDateKey(timestamp),
+    type: "trade",
+    asset: String(entry.symbol || "").toUpperCase(),
+    amount: quantity,
+    executedAt: new Date(timestamp).toISOString(),
+    side: isClosingTrade ? "sell" : "buy",
+    displaySide: describeFuturesSide(sideCode),
+    marketType: "futures",
+    isClosingTrade,
+    price,
+    quoteAmount: quantity * price,
+    baseAsset: String(entry.symbol || "").toUpperCase(),
+    fee,
+    feeAsset: String(entry.feeCurrency || "USDT").toUpperCase(),
+    isMaker: Number(entry.makerFee || 0) > 0 && Number(entry.takerFee || 0) === 0,
+    realizedPnl: Number(entry.profit || 0),
+    notes: `Futures ${describeFuturesSide(sideCode)} on ${String(entry.symbol || "").toUpperCase()}`,
+  };
+}
+
+function describeFuturesSide(sideCode) {
+  const labels = {
+    1: "Open Long",
+    2: "Close Short",
+    3: "Open Short",
+    4: "Close Long",
+  };
+
+  return labels[Number(sideCode || 0)] || "Futures Trade";
+}
+
+function buildFuturesRequestParam(params) {
+  return Object.entries(params || {})
+    .filter(([, value]) => value !== null && value !== undefined && String(value) !== "")
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+    .map(([key, value]) => `${key}=${encodeURIComponent(String(value)).replace(/\+/g, "%20")}`)
+    .join("&");
 }
 
 function parseSymbols(value) {
