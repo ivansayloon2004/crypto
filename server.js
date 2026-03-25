@@ -95,6 +95,7 @@ async function handleMexcActivity(req, res) {
   const apiSecret = String(body.apiSecret || "").trim();
   const apiBase = String(body.apiBase || "https://api.mexc.com").trim();
   const symbols = parseSymbols(body.symbols);
+  const includeFutures = body.includeFutures !== false;
   const timeRange = normalizeTimeRange(body.startDate, body.endDate);
 
   if (!apiKey || !apiSecret) {
@@ -104,26 +105,69 @@ async function handleMexcActivity(req, res) {
   }
 
   try {
-    const [account, exchangeInfo] = await Promise.all([
-      signedGet({ endpoint: "/api/v3/account", params: {}, apiKey, apiSecret, apiBase }),
-      publicGet({ endpoint: "/api/v3/exchangeInfo", apiBase }),
-    ]);
-    const candidateSymbols = (symbols.length > 0 ? symbols : getCandidateTradeSymbols(account, exchangeInfo)).slice(0, 20);
-    const tradeActivity = await fetchTradeActivity({
-      apiKey,
-      apiSecret,
-      apiBase,
-      account,
-      exchangeInfo,
-      symbols: candidateSymbols,
-      timeRange,
-    });
-    const prices = await fetchTickerPrices({
-      apiBase,
-      symbols: candidateSymbols,
-    });
+    const meta = {
+      spot: {
+        usedSymbols: [],
+        inferredSymbols: false,
+        startDate: toDateKey(timeRange.startTime),
+        endDate: toDateKey(timeRange.endTime),
+      },
+      futures: {
+        enabled: includeFutures,
+        startDate: toDateKey(timeRange.startTime),
+        endDate: toDateKey(timeRange.endTime),
+      },
+    };
+    const activities = [];
+    const prices = {};
+    const failures = [];
 
-    return sendJson(res, 200, { activities: tradeActivity, prices });
+    try {
+      const [account, exchangeInfo] = await Promise.all([
+        signedGet({ endpoint: "/api/v3/account", params: {}, apiKey, apiSecret, apiBase }),
+        publicGet({ endpoint: "/api/v3/exchangeInfo", apiBase }),
+      ]);
+      const spotTrades = await fetchTradeActivity({
+        apiKey,
+        apiSecret,
+        apiBase,
+        account,
+        exchangeInfo,
+        symbols,
+        timeRange,
+      });
+
+      activities.push(...spotTrades.activities);
+      Object.assign(prices, await fetchTickerPrices({
+        apiBase,
+        symbols: spotTrades.meta.usedSymbols,
+      }));
+      meta.spot = spotTrades.meta;
+    } catch (error) {
+      meta.spot.error = error.message;
+      failures.push(`spot: ${error.message}`);
+    }
+
+    if (includeFutures) {
+      try {
+        const futuresTrades = await fetchFuturesTradeActivity({
+          apiKey,
+          apiSecret,
+          timeRange,
+        });
+        activities.push(...futuresTrades.activities);
+        meta.futures = futuresTrades.meta;
+      } catch (error) {
+        meta.futures.error = error.message;
+        failures.push(`futures: ${error.message}`);
+      }
+    }
+
+    if (activities.length === 0 && failures.length > 0) {
+      return sendJson(res, 500, { error: failures.join(" | ") });
+    }
+
+    return sendJson(res, 200, { activities, prices, meta });
   } catch (error) {
     return sendJson(res, 500, { error: error.message });
   }
@@ -563,8 +607,14 @@ async function publicGet({ endpoint, apiBase }) {
 
 async function fetchTradeActivity({ apiKey, apiSecret, apiBase, account, exchangeInfo, symbols, timeRange }) {
   const candidateSymbols = (symbols.length > 0 ? symbols : getCandidateTradeSymbols(account, exchangeInfo)).slice(0, 20);
+  const meta = {
+    inferredSymbols: symbols.length === 0,
+    usedSymbols: candidateSymbols,
+    startDate: new Date(timeRange.startTime).toISOString().slice(0, 10),
+    endDate: new Date(timeRange.endTime).toISOString().slice(0, 10),
+  };
   if (candidateSymbols.length === 0) {
-    return [];
+    return { activities: [], meta };
   }
 
   const tradeResponses = await Promise.all(
@@ -584,7 +634,10 @@ async function fetchTradeActivity({ apiKey, apiSecret, apiBase, account, exchang
     )
   );
 
-  return tradeResponses.flatMap((payload, index) => mapTradeHistory(payload, candidateSymbols[index]));
+  return {
+    activities: tradeResponses.flatMap((payload, index) => mapTradeHistory(payload, candidateSymbols[index])),
+    meta,
+  };
 }
 
 async function fetchTickerPrices({ apiBase, symbols }) {

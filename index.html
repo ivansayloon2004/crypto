@@ -713,6 +713,7 @@
               Spot Symbols
               <input type="text" name="symbols" placeholder="BTCUSDT, ETHUSDT, SOLUSDT" autocomplete="off" />
             </label>
+            <p class="muted">Only spot trade history is synced. If you already closed a losing pair, enter the exact spot symbol here so it does not get missed.</p>
             <div class="split-fields">
               <label>
                 Sync From
@@ -747,7 +748,7 @@
             </div>
           </form>
           <p id="syncStatus" class="muted">
-            Add your own MEXC read-only API keys, then press <code>Sync MEXC</code>. By default the keys stay only for this browser session unless you explicitly remember them.
+            Add your own MEXC read-only API keys, then press <code>Sync MEXC</code>. Only spot trades are synced, and a blank symbol box checks pairs inferred from your current balances. By default the keys stay only for this browser session unless you explicitly remember them.
           </p>
         </section>
         </section>

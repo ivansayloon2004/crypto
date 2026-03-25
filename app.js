@@ -923,6 +923,7 @@ async function syncMexc() {
     state.events = mergeEvents(state.events.filter((entry) => entry.type === "trade"), normalized);
     state.pricesBySymbol = payload.prices || {};
     recalculateRealizedPnl();
+    focusMostRecentSyncedTrade(normalized);
     persistEvents();
     await fetchLivePhpRate(false);
     renderStats();
@@ -932,7 +933,7 @@ async function syncMexc() {
     renderSymbolAnalytics();
     renderMiniCharts();
     renderPerformanceCharts();
-    syncStatus.textContent = `Synced ${normalized.length} trades from MEXC.`;
+    syncStatus.textContent = buildMexcSyncStatus(payload.meta, normalized.length);
   } catch (error) {
     syncStatus.textContent = `MEXC sync unavailable: ${error.message}`;
   }
@@ -3836,7 +3837,7 @@ function getEventsForDate(dateKey, filtered = false) {
 }
 
 function normalizeEvent(entry) {
-  const normalizedDate = String(entry.date || "").slice(0, 10);
+  const normalizedDate = resolveEventDateKey(entry);
   if (!normalizedDate || Number.isNaN(new Date(normalizedDate).valueOf())) {
     throw new Error("Each event needs a valid date in YYYY-MM-DD format");
   }
@@ -3858,6 +3859,78 @@ function normalizeEvent(entry) {
     realizedPnl: Number(entry.realizedPnl || 0),
     notes: String(entry.notes || "").trim(),
   };
+}
+
+function resolveEventDateKey(entry) {
+  const rawExecutedAt = entry?.executedAt ?? "";
+  const executedAt = rawExecutedAt ? new Date(rawExecutedAt) : null;
+  if (executedAt && !Number.isNaN(executedAt.valueOf())) {
+    return formatDateKey(executedAt);
+  }
+  return String(entry?.date || "").slice(0, 10);
+}
+
+function buildMexcSyncStatus(meta, tradeCount) {
+  const baseMessage = `Synced ${tradeCount} trade${tradeCount === 1 ? "" : "s"} from MEXC.`;
+  if (!meta || typeof meta !== "object") {
+    return baseMessage;
+  }
+
+  const usedSymbols = Array.isArray(meta.usedSymbols)
+    ? meta.usedSymbols.map((symbol) => String(symbol || "").trim().toUpperCase()).filter(Boolean)
+    : [];
+  const symbolPreview = usedSymbols.length > 0
+    ? `${usedSymbols.slice(0, 4).join(", ")}${usedSymbols.length > 4 ? ", ..." : ""}`
+    : "";
+  const dateRange = meta.startDate && meta.endDate ? ` for ${meta.startDate} to ${meta.endDate}` : "";
+  const checkedSummary = usedSymbols.length > 0
+    ? ` Checked ${usedSymbols.length} spot symbol${usedSymbols.length === 1 ? "" : "s"}${dateRange}: ${symbolPreview}.`
+    : dateRange
+      ? ` Checked 0 spot symbols${dateRange}.`
+      : "";
+
+  if (tradeCount === 0 && usedSymbols.length === 0) {
+    return `${baseMessage} No spot symbols were checked because the symbol box is empty and no current-balance spot pairs could be inferred. Enter the exact spot pair, then sync again.`;
+  }
+
+  if (tradeCount === 0 && meta.inferredSymbols) {
+    return `${baseMessage}${checkedSummary} The symbol box is empty, so the app only checked pairs inferred from your current spot balances. Closed losing trades in symbols you no longer hold will not appear unless you enter the exact spot symbols and widen the date range if needed.`;
+  }
+
+  if (tradeCount === 0) {
+    return `${baseMessage}${checkedSummary} If the trade still does not appear, confirm the exact spot symbol and make sure the Sync From and Sync To dates include the trade date.`;
+  }
+
+  if (meta.inferredSymbols) {
+    return `${baseMessage}${checkedSummary} Symbols were inferred from your current spot balances. Add exact spot symbols if you need already-closed pairs to show up reliably.`;
+  }
+
+  return `${baseMessage}${checkedSummary}`;
+}
+
+function focusMostRecentSyncedTrade(events) {
+  if (!Array.isArray(events) || events.length === 0) {
+    return;
+  }
+
+  if (getEventsForDate(state.selectedDate).length > 0) {
+    return;
+  }
+
+  const latest = [...events].sort((left, right) => {
+    const leftTime = Date.parse(left.executedAt || `${left.date}T00:00:00Z`) || 0;
+    const rightTime = Date.parse(right.executedAt || `${right.date}T00:00:00Z`) || 0;
+    return rightTime - leftTime;
+  })[0];
+  const nextDate = String(latest?.date || "").slice(0, 10);
+  const nextMonth = nextDate ? new Date(`${nextDate}T00:00:00`) : null;
+
+  if (!nextDate || !nextMonth || Number.isNaN(nextMonth.valueOf())) {
+    return;
+  }
+
+  state.selectedDate = nextDate;
+  state.currentMonth = nextMonth;
 }
 
 function isLegacyDemoEvent(entry) {
