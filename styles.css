@@ -736,6 +736,11 @@ h1 {
   background: rgba(255, 255, 255, 0.025);
 }
 
+.trade-history-head,
+.trade-history-row {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.1fr) 108px minmax(0, 1fr) minmax(0, 0.9fr);
+}
+
 .mini-charts-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1255,6 +1260,69 @@ textarea {
   color: var(--gold);
 }
 
+.market-group {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.market-group-head,
+.market-group-title,
+.market-group-meta,
+.event-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.market-group-head {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.market-group-title h3 {
+  margin: 0;
+  font-size: 0.96rem;
+}
+
+.market-group-meta {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.market-group-list {
+  display: grid;
+  gap: 12px;
+}
+
+.market-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-family: "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  border: 1px solid transparent;
+}
+
+.market-badge-spot {
+  color: var(--sky);
+  background: rgba(125, 196, 255, 0.12);
+  border-color: rgba(125, 196, 255, 0.2);
+}
+
+.market-badge-futures {
+  color: var(--gold);
+  background: rgba(247, 185, 85, 0.12);
+  border-color: rgba(247, 185, 85, 0.24);
+}
+
 .event-header-row {
   display: flex;
   justify-content: space-between;
@@ -1286,6 +1354,14 @@ textarea {
   gap: 10px;
   color: var(--muted);
   font-size: 0.92rem;
+}
+
+.table-label {
+  padding: 12px 16px;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
 }
 
 .delete-button {

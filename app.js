@@ -816,7 +816,7 @@ function renderSelectedDate() {
   }).format(parsedDate);
 
   selectedDateLabel.textContent = readableDate;
-  selectedDateTotal.textContent = events.length === 0 ? "No trades" : `${summary.label} ${summary.value}`;
+  selectedDateTotal.textContent = buildSelectedDateTotal(events, summary);
 
   if (events.length === 0) {
     selectedDateEvents.className = "event-list";
@@ -829,30 +829,14 @@ function renderSelectedDate() {
     return;
   }
 
+  const spotEvents = events.filter((entry) => !isFuturesTrade(entry));
+  const futuresEvents = events.filter(isFuturesTrade);
+
   selectedDateEvents.className = "event-list";
   selectedDateEvents.innerHTML = `
     ${dayNote ? `<article class="day-note-card"><h3>Your Note</h3><div class="event-notes">${escapeHtml(dayNote)}</div></article>` : ""}
-    ${events
-      .sort((left, right) => (left.executedAt || "").localeCompare(right.executedAt || ""))
-      .map((entry) => `
-        <article class="event-item ${entry.type}">
-          <div class="event-header-row">
-            <div class="event-meta">
-              <span class="event-type">${escapeHtml(getTradeSideLabel(entry))}</span>
-              <span>${escapeHtml(entry.asset)}</span>
-            </div>
-            <button class="delete-button" data-id="${escapeHtml(entry.id)}" type="button">Delete</button>
-          </div>
-          <h3>${formatAmount(entry.amount)} ${escapeHtml(entry.asset)}</h3>
-          <div class="trade-stats">
-            <span>Price (PHP): ${formatMoney(entry.price)}</span>
-            <span>Value (PHP): ${formatMoney(entry.quoteAmount)}</span>
-            <span class="${getRealizedPnl(entry) >= 0 ? "positive-text" : "negative-text"}">Realized P/L (PHP): ${formatSignedMoney(getRealizedPnl(entry))}</span>
-          </div>
-          <div class="event-notes">${entry.notes ? escapeHtml(entry.notes) : "No exchange note."}</div>
-        </article>
-      `)
-      .join("")}
+    ${renderSelectedDateMarketSection("Spot Trades", spotEvents, "spot")}
+    ${renderSelectedDateMarketSection("Futures Trades", futuresEvents, "futures")}
   `;
 
   selectedDateEvents.querySelectorAll(".delete-button").forEach((button) => {
@@ -862,6 +846,80 @@ function renderSelectedDate() {
   });
   renderTradeStory();
   renderTradeReplay();
+}
+
+function buildSelectedDateTotal(events, summary) {
+  if (events.length === 0) {
+    return "No trades";
+  }
+
+  const spotCount = events.filter((entry) => !isFuturesTrade(entry)).length;
+  const futuresCount = events.filter(isFuturesTrade).length;
+  const parts = [];
+
+  if (spotCount > 0) {
+    parts.push(`${spotCount} spot`);
+  }
+  if (futuresCount > 0) {
+    parts.push(`${futuresCount} futures`);
+  }
+  if (summary?.value) {
+    parts.push(`${summary.label} ${summary.value}`);
+  }
+
+  return parts.join(" • ");
+}
+
+function renderSelectedDateMarketSection(title, entries, marketType) {
+  if (!entries || entries.length === 0) {
+    return "";
+  }
+
+  const ordered = [...entries].sort((left, right) => (left.executedAt || "").localeCompare(right.executedAt || ""));
+  const realized = ordered.reduce((sum, entry) => sum + getRealizedPnl(entry), 0);
+
+  return `
+    <section class="market-group market-group-${escapeHtml(marketType)}">
+      <div class="market-group-head">
+        <div class="market-group-title">
+          <span class="market-badge market-badge-${escapeHtml(marketType)}">${escapeHtml(marketType)}</span>
+          <h3>${escapeHtml(title)}</h3>
+        </div>
+        <div class="market-group-meta">
+          <span>${ordered.length} trade${ordered.length === 1 ? "" : "s"}</span>
+          <span class="${realized > 0 ? "positive-text" : realized < 0 ? "negative-text" : ""}">${formatSignedMoney(realized)}</span>
+        </div>
+      </div>
+      <div class="market-group-list">
+        ${ordered.map((entry) => renderTradeEventCard(entry)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderTradeEventCard(entry) {
+  const marketType = isFuturesTrade(entry) ? "futures" : "spot";
+  return `
+    <article class="event-item ${entry.type} event-item-${escapeHtml(marketType)}">
+      <div class="event-header-row">
+        <div class="event-meta">
+          <span class="event-type">${escapeHtml(getTradeSideLabel(entry))}</span>
+          <span>${escapeHtml(entry.asset)}</span>
+        </div>
+        <div class="event-actions">
+          <span class="market-badge market-badge-${escapeHtml(marketType)}">${escapeHtml(marketType)}</span>
+          <button class="delete-button" data-id="${escapeHtml(entry.id)}" type="button">Delete</button>
+        </div>
+      </div>
+      <h3>${formatAmount(entry.amount)} ${escapeHtml(entry.asset)}</h3>
+      <div class="trade-stats">
+        <span>Price (PHP): ${formatMoney(entry.price)}</span>
+        <span>Value (PHP): ${formatMoney(entry.quoteAmount)}</span>
+        <span class="${getRealizedPnl(entry) >= 0 ? "positive-text" : "negative-text"}">Realized P/L (PHP): ${formatSignedMoney(getRealizedPnl(entry))}</span>
+      </div>
+      <div class="event-notes">${entry.notes ? escapeHtml(entry.notes) : "No exchange note."}</div>
+    </article>
+  `;
 }
 
 function toggleCalendarHeatmap() {
@@ -2420,14 +2478,15 @@ function renderTradeHistoryTable() {
   }
 
   tradeHistoryTable.innerHTML = `
-    <div class="table-head">
+    <div class="table-head trade-history-head">
       ${renderTradeHistorySortButton("Date", "executedAt")}
       ${renderTradeHistorySortButton("Symbol", "asset")}
+      <span class="table-label">Market</span>
       ${renderTradeHistorySortButton("Side", "side")}
       ${renderTradeHistorySortButton("Realized", "realizedPnl")}
     </div>
     ${rows.map((entry) => `
-      <div class="table-row">
+      <div class="table-row trade-history-row">
         <span>
           <strong>${escapeHtml(formatDateTime(Date.parse(entry.executedAt || `${entry.date}T00:00:00Z`) || 0))}</strong><br />
           <span class="muted">${escapeHtml(entry.date)}</span>
@@ -2435,6 +2494,9 @@ function renderTradeHistoryTable() {
         <span>
           <strong>${escapeHtml(entry.asset)}</strong><br />
           <span class="muted">${formatAmount(entry.amount)} @ ${formatMoney(entry.price)}</span>
+        </span>
+        <span>
+          <span class="market-badge market-badge-${isFuturesTrade(entry) ? "futures" : "spot"}">${isFuturesTrade(entry) ? "futures" : "spot"}</span>
         </span>
         <span>
           <span class="event-type">${escapeHtml(getTradeSideLabel(entry))}</span><br />
@@ -3799,10 +3861,10 @@ function getFilteredEvents() {
     if (state.filters.result === "losses" && getRealizedPnl(entry) >= 0) {
       return false;
     }
-    if (state.filters.marketType === "spot" && String(entry.asset || "").includes("_")) {
+    if (state.filters.marketType === "spot" && isFuturesTrade(entry)) {
       return false;
     }
-    if (state.filters.marketType === "futures" && !String(entry.asset || "").includes("_")) {
+    if (state.filters.marketType === "futures" && !isFuturesTrade(entry)) {
       return false;
     }
     if (state.filters.startDate && entry.date < state.filters.startDate) {

@@ -710,10 +710,10 @@
               <input type="text" name="apiBase" value="https://api.mexc.com" />
             </label>
             <label>
-              Spot Symbols
+              Spot Symbols (Optional)
               <input type="text" name="symbols" placeholder="BTCUSDT, ETHUSDT, SOLUSDT" autocomplete="off" />
             </label>
-            <p class="muted">If you already closed a losing spot pair, enter the exact spot symbol here so it does not get missed.</p>
+            <p class="muted">Leave this blank if you want auto spot detection. Add exact spot symbols only when you want to force specific spot pairs.</p>
             <label class="checkbox-row">
               <input type="checkbox" name="includeFutures" checked />
               <span>Include futures trade history in sync too</span>
@@ -752,7 +752,7 @@
             </div>
           </form>
           <p id="syncStatus" class="muted">
-            Add your own MEXC read-only API keys, then press <code>Sync MEXC</code>. Spot trades sync from the exact spot symbols you enter or from inferred current balances, and futures history can sync too when the futures checkbox stays on. By default the keys stay only for this browser session unless you explicitly remember them.
+            Add your own MEXC read-only API keys, then press <code>Sync MEXC</code>. Spot trades can auto-detect when the symbol box is blank, and futures history can sync too when the futures checkbox stays on. By default the keys stay only for this browser session unless you explicitly remember them.
           </p>
         </section>
         </section>
