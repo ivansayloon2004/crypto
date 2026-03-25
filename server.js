@@ -95,6 +95,7 @@ async function handleMexcActivity(req, res) {
   const apiSecret = String(body.apiSecret || "").trim();
   const apiBase = String(body.apiBase || "https://api.mexc.com").trim();
   const symbols = parseSymbols(body.symbols);
+  const knownSymbols = parseSymbols(body.knownSymbols);
   const includeFutures = body.includeFutures !== false;
   const timeRange = normalizeTimeRange(body.startDate, body.endDate);
 
@@ -134,6 +135,7 @@ async function handleMexcActivity(req, res) {
         account,
         exchangeInfo,
         symbols,
+        knownSymbols,
         timeRange,
       });
 
@@ -632,13 +634,17 @@ async function publicGet({ endpoint, apiBase }) {
   return payload;
 }
 
-async function fetchTradeActivity({ apiKey, apiSecret, apiBase, account, exchangeInfo, symbols, timeRange }) {
-  const candidateSymbols = (symbols.length > 0 ? symbols : getCandidateTradeSymbols(account, exchangeInfo)).slice(0, 20);
+async function fetchTradeActivity({ apiKey, apiSecret, apiBase, account, exchangeInfo, symbols, knownSymbols = [], timeRange }) {
+  const inferredSymbols = getCandidateTradeSymbols(account, exchangeInfo);
+  const candidateSymbols = [...new Set([...(symbols || []), ...(knownSymbols || []), ...inferredSymbols])].slice(0, 30);
+  const effectiveTimeRange = normalizeSpotTradeTimeRange(timeRange);
   const meta = {
     inferredSymbols: symbols.length === 0,
+    importedSymbolMemory: knownSymbols.length > 0,
     usedSymbols: candidateSymbols,
-    startDate: new Date(timeRange.startTime).toISOString().slice(0, 10),
-    endDate: new Date(timeRange.endTime).toISOString().slice(0, 10),
+    startDate: new Date(effectiveTimeRange.startTime).toISOString().slice(0, 10),
+    endDate: new Date(effectiveTimeRange.endTime).toISOString().slice(0, 10),
+    apiWindow: "spot last 30 days",
   };
   if (candidateSymbols.length === 0) {
     return { activities: [], meta };
@@ -651,8 +657,8 @@ async function fetchTradeActivity({ apiKey, apiSecret, apiBase, account, exchang
         params: {
           symbol,
           limit: "100",
-          startTime: timeRange.startTime.toString(),
-          endTime: timeRange.endTime.toString(),
+          startTime: effectiveTimeRange.startTime.toString(),
+          endTime: effectiveTimeRange.endTime.toString(),
         },
         apiKey,
         apiSecret,
@@ -665,6 +671,17 @@ async function fetchTradeActivity({ apiKey, apiSecret, apiBase, account, exchang
     activities: tradeResponses.flatMap((payload, index) => mapTradeHistory(payload, candidateSymbols[index])),
     meta,
   };
+}
+
+function normalizeSpotTradeTimeRange(timeRange) {
+  const now = Date.now();
+  const maxLookback = 30 * 24 * 60 * 60 * 1000;
+  const minAllowed = now - maxLookback;
+  const requestedStart = Number(timeRange?.startTime || minAllowed);
+  const requestedEnd = Number(timeRange?.endTime || now);
+  const endTime = Math.min(now, Math.max(requestedEnd, minAllowed));
+  const startTime = Math.max(minAllowed, Math.min(requestedStart, endTime));
+  return { startTime, endTime };
 }
 
 async function fetchFuturesTradeActivity({ apiKey, apiSecret, timeRange }) {
@@ -866,7 +883,7 @@ function parseSymbols(value) {
 function normalizeTimeRange(startDate, endDate) {
   const now = new Date();
   const defaultEnd = now.getTime();
-  const defaultStart = defaultEnd - 30 * 24 * 60 * 60 * 1000;
+  const defaultStart = defaultEnd - 90 * 24 * 60 * 60 * 1000;
   const parsedStart = parseDateOnly(startDate, "start");
   const parsedEnd = parseDateOnly(endDate, "end");
   let startTime = parsedStart ?? defaultStart;
@@ -876,7 +893,7 @@ function normalizeTimeRange(startDate, endDate) {
     [startTime, endTime] = [endTime, startTime];
   }
 
-  const maxWindow = 30 * 24 * 60 * 60 * 1000;
+  const maxWindow = 90 * 24 * 60 * 60 * 1000;
   if (endTime - startTime > maxWindow) {
     startTime = endTime - maxWindow;
   }

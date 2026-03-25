@@ -668,14 +668,19 @@
           <div class="section-head">
             <div>
               <p class="section-label">Import</p>
-              <h2>Paste JSON</h2>
+              <h2>Import Older Trade History</h2>
             </div>
           </div>
           <p class="muted">
-            Accepts an array of objects with <code>date</code>, <code>type</code>, <code>asset</code>, <code>amount</code>, and optional <code>notes</code>.
+            Paste JSON or upload an older MEXC export file. This is the best way to bring in spot trades older than the MEXC API auto-sync window.
           </p>
+          <label>
+            MEXC Export File
+            <input id="historyFileInput" type="file" accept=".csv,text/csv,.json,application/json" />
+          </label>
           <textarea id="jsonInput" class="json-input" rows="7" placeholder='[{"date":"2026-03-22","type":"trade","asset":"ETH","amount":1.2,"notes":"Grid bot fill"}]'></textarea>
           <div class="stack-row">
+            <button id="importHistoryButton" class="button button-secondary" type="button">Import File</button>
             <button id="importButton" class="button button-secondary">Import JSON</button>
             <button id="resetButton" class="button button-ghost">Clear Local Data</button>
           </div>

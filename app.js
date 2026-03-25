@@ -104,6 +104,8 @@ const selectedDateTotal = document.getElementById("selectedDateTotal");
 const syncStatus = document.getElementById("syncStatus");
 const dayNoteForm = document.getElementById("dayNoteForm");
 const jsonInput = document.getElementById("jsonInput");
+const historyFileInput = document.getElementById("historyFileInput");
+const importHistoryButton = document.getElementById("importHistoryButton");
 const mexcForm = document.getElementById("mexcForm");
 const marketSymbolInput = document.getElementById("marketSymbolInput");
 const marketIntervalSelect = document.getElementById("marketIntervalSelect");
@@ -330,27 +332,261 @@ document.getElementById("resetButton").addEventListener("click", () => {
 
 document.getElementById("importButton").addEventListener("click", () => {
   try {
-    const parsed = JSON.parse(jsonInput.value);
-    if (!Array.isArray(parsed)) {
-      throw new Error("JSON must be an array");
-    }
-
-    const normalized = parsed.map(normalizeEvent);
-    state.events = [...state.events, ...normalized];
-    recalculateRealizedPnl();
-    persistEvents();
+    const normalized = parseImportPayload(jsonInput.value, "json");
+    appendImportedEvents(normalized);
     jsonInput.value = "";
-    renderStats();
-    renderCalendar();
-    renderSelectedDate();
-    renderSymbolAnalytics();
-    renderMiniCharts();
-    renderPerformanceCharts();
     syncStatus.textContent = `Imported ${normalized.length} activities into your calendar.`;
   } catch (error) {
     syncStatus.textContent = `Import failed: ${error.message}`;
   }
 });
+
+importHistoryButton?.addEventListener("click", async () => {
+  try {
+    const file = historyFileInput?.files?.[0];
+    if (!file) {
+      throw new Error("Choose an export file first");
+    }
+
+    const raw = await file.text();
+    const normalized = parseImportPayload(raw, file.name);
+    appendImportedEvents(normalized);
+    if (historyFileInput) {
+      historyFileInput.value = "";
+    }
+    syncStatus.textContent = `Imported ${normalized.length} activities from ${file.name}.`;
+  } catch (error) {
+    syncStatus.textContent = `Import failed: ${error.message}`;
+  }
+});
+
+function appendImportedEvents(normalized) {
+  state.events = mergeEvents(state.events, normalized);
+  recalculateRealizedPnl();
+  persistEvents();
+  renderStats();
+  renderCalendar();
+  renderSelectedDate();
+  renderSymbolAnalytics();
+  renderMiniCharts();
+  renderPerformanceCharts();
+}
+
+function parseImportPayload(rawValue, sourceName = "") {
+  const text = String(rawValue || "").trim();
+  if (!text) {
+    throw new Error("Import content is empty");
+  }
+
+  const looksJson = String(sourceName || "").toLowerCase().endsWith(".json") || text.startsWith("[") || text.startsWith("{");
+  if (looksJson) {
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) {
+      throw new Error("JSON must be an array");
+    }
+    return parsed.map(normalizeEvent);
+  }
+
+  return parseCsvImport(text);
+}
+
+function parseCsvImport(text) {
+  const rows = parseCsvRows(text);
+  if (rows.length < 2) {
+    throw new Error("CSV file looks empty");
+  }
+
+  const headers = rows[0];
+  const bodyRows = rows.slice(1).filter((row) => row.some((cell) => String(cell || "").trim()));
+  const mapped = bodyRows
+    .map((row) => mapCsvRowToEvent(row, headers))
+    .filter(Boolean);
+
+  if (mapped.length === 0) {
+    throw new Error("Could not find supported trade rows in this file");
+  }
+
+  return mapped.map(normalizeEvent);
+}
+
+function parseCsvRows(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (char === "\"") {
+      if (inQuotes && next === "\"") {
+        cell += "\"";
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (!inQuotes && char === ",") {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+
+    if (!inQuotes && (char === "\n" || char === "\r")) {
+      if (char === "\r" && next === "\n") {
+        index += 1;
+      }
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+
+    cell += char;
+  }
+
+  if (cell.length > 0 || row.length > 0) {
+    row.push(cell);
+    rows.push(row);
+  }
+
+  return rows.map((entry) => entry.map((cell) => String(cell || "").trim()));
+}
+
+function mapCsvRowToEvent(row, headers) {
+  const record = Object.fromEntries(headers.map((header, index) => [normalizeImportHeader(header), String(row[index] || "").trim()]));
+  const rawSymbol = pickImportField(record, ["symbol", "tradingpair", "pair", "market", "contract", "instrument"]);
+  const rawTime = pickImportField(record, ["tradetime", "time", "executedtime", "filledtime", "createtime", "updatetime", "date", "datetime"]);
+  const rawSide = pickImportField(record, ["side", "direction", "tradetype", "positioneffect", "type"]);
+  const rawQuantity = pickImportField(record, ["qty", "quantity", "amount", "filledqty", "dealvol", "volume", "vol"]);
+  const rawPrice = pickImportField(record, ["price", "avgprice", "dealavgprice", "dealprice", "executionprice"]);
+  const rawQuote = pickImportField(record, ["quoteqty", "quoteamount", "cumulativequoteqty", "amountusdt", "turnover", "filledamount", "dealamount", "value"]);
+  const rawFee = pickImportField(record, ["fee", "commission", "tradingfee"]);
+  const rawFeeAsset = pickImportField(record, ["feeasset", "commissionasset", "feecurrency"]);
+  const rawPnl = pickImportField(record, ["realizedpnl", "pnl", "profit", "closeprofit"]);
+  const rawOrderId = pickImportField(record, ["id", "tradeid", "orderid", "order"]);
+  const rawMarketType = pickImportField(record, ["markettype", "accounttype", "tradingscope"]);
+
+  if (!rawSymbol || !rawTime) {
+    return null;
+  }
+
+  const marketType = inferImportMarketType(rawSymbol, rawSide, rawMarketType);
+  const parsedTime = parseImportDate(rawTime);
+  const asset = normalizeImportedSymbol(rawSymbol, marketType);
+  const amount = parseImportNumber(rawQuantity);
+  const price = parseImportNumber(rawPrice);
+  const quoteAmount = rawQuote ? parseImportNumber(rawQuote) : amount * price;
+  const sideInfo = normalizeImportedSide(rawSide, marketType);
+  const stableId = rawOrderId || buildImportedTradeId(asset, parsedTime, sideInfo.side, amount, price, marketType);
+
+  return {
+    id: stableId,
+    date: formatDateKey(parsedTime),
+    type: "trade",
+    asset,
+    amount,
+    side: sideInfo.side,
+    displaySide: sideInfo.displaySide,
+    marketType,
+    isClosingTrade: sideInfo.isClosingTrade,
+    price,
+    quoteAmount,
+    baseAsset: asset,
+    fee: parseImportNumber(rawFee),
+    feeAsset: String(rawFeeAsset || "").trim().toUpperCase(),
+    executedAt: parsedTime.toISOString(),
+    realizedPnl: parseImportNumber(rawPnl),
+    notes: `Imported from MEXC export${sideInfo.displaySide ? ` (${sideInfo.displaySide})` : ""}`,
+  };
+}
+
+function normalizeImportHeader(value) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function pickImportField(record, keys) {
+  for (const key of keys) {
+    const normalizedKey = normalizeImportHeader(key);
+    if (record[normalizedKey]) {
+      return record[normalizedKey];
+    }
+  }
+  return "";
+}
+
+function parseImportNumber(value) {
+  const cleaned = String(value || "").replace(/,/g, "").replace(/[^\d.\-]/g, "").trim();
+  const parsed = Number(cleaned || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseImportDate(value) {
+  const parsed = new Date(String(value || "").trim());
+  if (Number.isNaN(parsed.valueOf())) {
+    throw new Error(`Could not read date from import row: ${value}`);
+  }
+  return parsed;
+}
+
+function inferImportMarketType(symbol, side, marketType) {
+  const rawMarketType = String(marketType || "").toLowerCase();
+  const rawSide = String(side || "").toLowerCase();
+  if (rawMarketType.includes("future") || rawMarketType.includes("contract")) {
+    return "futures";
+  }
+  if (String(symbol || "").includes("_")) {
+    return "futures";
+  }
+  if (rawSide.includes("long") || rawSide.includes("short")) {
+    return "futures";
+  }
+  return "spot";
+}
+
+function normalizeImportedSymbol(symbol, marketType) {
+  const raw = String(symbol || "").trim().toUpperCase();
+  if (marketType === "futures") {
+    return raw.includes("_") ? raw : normalizeChartSymbol(raw, "futures");
+  }
+  return raw.replace(/_/g, "");
+}
+
+function normalizeImportedSide(side, marketType) {
+  const raw = String(side || "").trim().toLowerCase();
+  if (marketType === "futures") {
+    if (raw.includes("open long")) return { side: "buy", displaySide: "Open Long", isClosingTrade: false };
+    if (raw.includes("close short")) return { side: "sell", displaySide: "Close Short", isClosingTrade: true };
+    if (raw.includes("open short")) return { side: "buy", displaySide: "Open Short", isClosingTrade: false };
+    if (raw.includes("close long")) return { side: "sell", displaySide: "Close Long", isClosingTrade: true };
+    if (raw === "1") return { side: "buy", displaySide: "Open Long", isClosingTrade: false };
+    if (raw === "2") return { side: "sell", displaySide: "Close Short", isClosingTrade: true };
+    if (raw === "3") return { side: "buy", displaySide: "Open Short", isClosingTrade: false };
+    if (raw === "4") return { side: "sell", displaySide: "Close Long", isClosingTrade: true };
+  }
+
+  return {
+    side: raw.includes("sell") ? "sell" : "buy",
+    displaySide: raw.includes("sell") ? "Sell" : "Buy",
+    isClosingTrade: raw.includes("sell"),
+  };
+}
+
+function buildImportedTradeId(asset, date, side, amount, price, marketType) {
+  return [
+    "import",
+    marketType,
+    String(asset || "").toUpperCase(),
+    date instanceof Date ? date.toISOString() : String(date || ""),
+    String(side || ""),
+    Number(amount || 0).toFixed(8),
+    Number(price || 0).toFixed(8),
+  ].join("-");
+}
 
 dayNoteForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -968,6 +1204,11 @@ async function syncMexc() {
         apiSecret: config.apiSecret,
         apiBase: config.apiBase,
         symbols: config.symbols,
+        knownSymbols: state.events
+          .filter((entry) => !isFuturesTrade(entry))
+          .map((entry) => String(entry.asset || "").trim().toUpperCase())
+          .filter(Boolean)
+          .join(","),
         startDate: config.startDate,
         endDate: config.endDate,
         includeFutures: config.includeFutures,
@@ -3483,7 +3724,7 @@ function handleChartVisibilityChange() {
 
 function setDefaultSyncRange() {
   if (!mexcForm.elements.startDate.value) {
-    mexcForm.elements.startDate.value = shiftDateKey(new Date(), -30);
+    mexcForm.elements.startDate.value = shiftDateKey(new Date(), -90);
   }
   if (!mexcForm.elements.endDate.value) {
     mexcForm.elements.endDate.value = formatDateKey(new Date());
@@ -3975,6 +4216,12 @@ function buildMexcSyncStatus(meta, tradeCount) {
       messages.push(`Checked ${usedSymbols.length} spot symbol${usedSymbols.length === 1 ? "" : "s"}${dateRange}: ${symbolPreview}.`);
       if (tradeCount === 0 && spotMeta.inferredSymbols) {
         messages.push("Spot symbols were inferred from your current spot balances, so already-closed spot pairs may be missed unless you type the exact spot symbol.");
+      }
+      if (spotMeta.importedSymbolMemory) {
+        messages.push("Saved spot symbols from your existing trade history were also checked automatically.");
+      }
+      if (spotMeta.apiWindow) {
+        messages.push(`MEXC spot auto-sync is limited to ${spotMeta.apiWindow}. Import an older MEXC export file if you want older spot trades to appear too.`);
       }
     }
   }
