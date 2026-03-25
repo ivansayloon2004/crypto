@@ -1204,11 +1204,7 @@ async function syncMexc() {
         apiSecret: config.apiSecret,
         apiBase: config.apiBase,
         symbols: config.symbols,
-        knownSymbols: state.events
-          .filter((entry) => !isFuturesTrade(entry))
-          .map((entry) => String(entry.asset || "").trim().toUpperCase())
-          .filter(Boolean)
-          .join(","),
+        knownSymbols: collectKnownSyncSymbols().join(","),
         startDate: config.startDate,
         endDate: config.endDate,
         includeFutures: config.includeFutures,
@@ -1225,6 +1221,10 @@ async function syncMexc() {
     state.pricesBySymbol = payload.prices || {};
     recalculateRealizedPnl();
     focusMostRecentSyncedTrade(normalized);
+    if (normalized.length > 0) {
+      switchMainWindow("overview");
+      switchSidebarPane("day");
+    }
     persistEvents();
     await fetchLivePhpRate(false);
     renderStats();
@@ -1238,6 +1238,28 @@ async function syncMexc() {
   } catch (error) {
     syncStatus.textContent = `MEXC sync unavailable: ${error.message}`;
   }
+}
+
+function collectKnownSyncSymbols() {
+  const rememberedTradeSymbols = state.events
+    .filter((entry) => !isFuturesTrade(entry))
+    .map((entry) => String(entry.asset || "").trim().toUpperCase());
+  const currentSpotChartSymbol = state.marketType === "spot"
+    ? [String(marketSymbolInput?.value || "").trim().toUpperCase()]
+    : [];
+  const favoriteSymbols = Array.isArray(state.favorites)
+    ? state.favorites.map((entry) => String(entry || "").trim().toUpperCase())
+    : [];
+  const watchlistSymbols = Object.values(state.watchlists || {})
+    .flatMap((symbols) => Array.isArray(symbols) ? symbols : [])
+    .map((entry) => String(entry || "").trim().toUpperCase());
+
+  return [...new Set([
+    ...rememberedTradeSymbols,
+    ...currentSpotChartSymbol,
+    ...favoriteSymbols,
+    ...watchlistSymbols,
+  ])].filter(Boolean).slice(0, 30);
 }
 
 async function restoreSession() {
@@ -4267,7 +4289,7 @@ function focusMostRecentSyncedTrade(events) {
     return;
   }
 
-  if (getEventsForDate(state.selectedDate).length > 0) {
+  if (events.some((entry) => entry.date === state.selectedDate)) {
     return;
   }
 
